@@ -416,6 +416,7 @@ const App: React.FC = () => {
                 />;
       case 'settings':
         return <SettingsPage 
+                    session={session}
                     onSignOut={handleSignOut}
                     categories={categories}
                     onAddCategory={addCategory}
