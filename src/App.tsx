@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Transaction, TransactionLineItem } from './types';
-import { PAYMENT_METHODS } from './constants';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Transaction } from './types';
 import { calculateTotalAmount } from './utils/transactionUtils';
 import BottomNav from './components/SideNav';
 import HomePage from './pages/HomePage';
@@ -11,8 +11,8 @@ import Modal, { ModalProps } from './components/Modal';
 import Toast, { ToastProps } from './components/Toast';
 import TransactionDetailView from './components/reports/TransactionDetailView';
 import LoginPage from './pages/LoginPage';
-import { useSession } from './components/SessionContextProvider';
-import EditTransactionForm from './components/EditTransactionForm'; // Import the new component
+import { SessionContextProvider, useSession } from './components/SessionContextProvider';
+import EditTransactionForm from './components/EditTransactionForm';
 import {
   getInitialData,
   addTransaction as addTransactionSupabase,
@@ -24,10 +24,9 @@ import {
 
 export type Page = 'home' | 'transactions' | 'reports' | 'settings';
 
-const App: React.FC = () => {
+const AppContent: React.FC = () => {
   const { session, user, isLoading: isAuthLoading } = useSession();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [currentPage, setCurrentPage] = useState<Page>('home');
   const [categories, setCategories] = useState<string[]>([]);
   const [isDataLoading, setIsDataLoading] = useState(true);
 
@@ -270,46 +269,6 @@ const App: React.FC = () => {
     return <LoginPage />;
   }
 
-  const renderPage = () => {
-    switch (currentPage) {
-      case 'home':
-        return <HomePage 
-                  stats={{ totalSales, totalExpenses, netProfit }} 
-                  transactions={transactions}
-                  onTransactionClick={handleViewTransaction}
-               />;
-      case 'transactions':
-        return <TransactionsPage 
-                  transactions={transactions} 
-                  addTransaction={addTransaction}
-                  categories={categories}
-                  addCategory={addCategory}
-                  onTransactionClick={handleViewTransaction}
-                  transactionDescriptions={transactionDescriptions}
-                  itemDescriptions={itemDescriptions}
-               />;
-      case 'reports':
-        return <ReportsPage 
-                  transactions={transactions} 
-                  categories={categories} 
-                  onTransactionClick={handleViewTransaction}
-                />;
-      case 'settings':
-        return <SettingsPage 
-                    onResetData={handleResetData}
-                    categories={categories}
-                    onAddCategory={addCategory}
-                    onDeleteCategory={deleteCategory}
-                />;
-      default:
-        return <HomePage 
-                  stats={{ totalSales, totalExpenses, netProfit }} 
-                  transactions={transactions}
-                  onTransactionClick={handleViewTransaction}
-                />;
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gray-100">
       <header className="bg-white shadow-sm p-4 border-b border-gray-200 text-center sticky top-0 z-10">
@@ -321,18 +280,54 @@ const App: React.FC = () => {
       </header>
       
       <main className="container mx-auto p-4 md:p-6 lg:p-8 pb-24">
-          {renderPage()}
+          <Routes>
+            <Route path="/" element={<HomePage 
+                                        stats={{ totalSales, totalExpenses, netProfit }} 
+                                        transactions={transactions}
+                                        onTransactionClick={handleViewTransaction}
+                                      />} 
+            />
+            <Route path="/transactions" element={<TransactionsPage 
+                                                    transactions={transactions} 
+                                                    addTransaction={addTransaction}
+                                                    categories={categories}
+                                                    addCategory={addCategory}
+                                                    onTransactionClick={handleViewTransaction}
+                                                    transactionDescriptions={transactionDescriptions}
+                                                    itemDescriptions={itemDescriptions}
+                                                  />} 
+            />
+            <Route path="/reports" element={<ReportsPage 
+                                                transactions={transactions} 
+                                                categories={categories} 
+                                                onTransactionClick={handleViewTransaction}
+                                              />} 
+            />
+            <Route path="/settings" element={<SettingsPage 
+                                                  onResetData={handleResetData}
+                                                  categories={categories}
+                                                  onAddCategory={addCategory}
+                                                  onDeleteCategory={deleteCategory}
+                                              />} 
+            />
+            <Route path="*" element={<Navigate to="/" replace />} /> {/* Redirect any unknown routes to home */}
+          </Routes>
       </main>
       
-      <BottomNav
-        currentPage={currentPage} 
-        setCurrentPage={setCurrentPage} 
-      />
+      <BottomNav /> {/* BottomNav no longer needs currentPage or setCurrentPage */}
 
       <Modal {...modalState} onClose={closeModal} />
       <Toast {...toastState} onClose={() => setToastState(prev => ({...prev, isVisible: false}))} />
     </div>
   );
 };
+
+const App: React.FC = () => (
+  <Router>
+    <SessionContextProvider>
+      <AppContent />
+    </SessionContextProvider>
+  </Router>
+);
 
 export default App;
