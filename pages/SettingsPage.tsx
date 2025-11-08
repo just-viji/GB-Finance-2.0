@@ -2,14 +2,14 @@ import React from 'react';
 import CategoryManager from '../components/CategoryManager';
 
 interface SettingsPageProps {
-    onResetData: () => void;
+    onSignOut?: () => void;
     categories: string[];
     onAddCategory: (category: string) => void;
     onDeleteCategory: (category: string) => void;
 }
 
 const SettingsPage: React.FC<SettingsPageProps> = ({
-    onResetData,
+    onSignOut,
     categories,
     onAddCategory,
     onDeleteCategory,
@@ -24,14 +24,17 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 onAddCategory={onAddCategory}
                 onDeleteCategory={onDeleteCategory}
             />
-            <div className="bg-white p-6 rounded-xl shadow-md">
-                <h2 className="text-xl font-semibold mb-4 text-brand-dark">Data Management</h2>
-                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md mb-4">
-                    <h3 className="font-semibold text-yellow-800">Warning</h3>
-                    <p className="text-sm text-yellow-700">Resetting data will permanently delete all your transactions and custom categories. This action cannot be undone.</p>
+            {onSignOut && (
+                <div className="bg-white p-6 rounded-xl shadow-md">
+                    <h2 className="text-xl font-semibold mb-4 text-brand-dark">Account</h2>
+                    <button 
+                        onClick={onSignOut} 
+                        className="w-full bg-brand-secondary text-white font-semibold py-2 px-4 rounded-md hover:bg-slate-600 transition-colors"
+                    >
+                        Sign Out
+                    </button>
                 </div>
-                 <button onClick={onResetData} className="w-full bg-brand-accent text-white font-semibold py-2 px-4 rounded-md hover:bg-red-600 transition-colors">Reset All Data</button>
-            </div>
+            )}
         </div>
     );
 };

@@ -1,8 +1,22 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { getStoredTransactions, setStoredTransactions, getStoredCategories, setStoredCategories, clearAllData } from './services/storageService';
+import { Session } from '@supabase/supabase-js';
+import { 
+    isSupabaseConfigured,
+    getSession as getSupabaseSession, 
+    onAuthStateChange,
+    getInitialData,
+    addTransaction as supabaseAddTransaction,
+    updateTransaction as supabaseUpdateTransaction,
+    deleteTransaction as supabaseDeleteTransaction,
+    addCategory as supabaseAddCategory,
+    deleteCategory as supabaseDeleteCategory,
+    signOut
+} from './services/supabase';
+
 import { Transaction, TransactionLineItem } from './types';
 import { PAYMENT_METHODS } from './constants';
 import { calculateTotalAmount } from './utils/transactionUtils';
+
 import BottomNav from './components/SideNav';
 import HomePage from './pages/HomePage';
 import TransactionsPage from './pages/TransactionsPage';
@@ -11,6 +25,8 @@ import SettingsPage from './pages/SettingsPage';
 import Modal, { ModalProps } from './components/Modal';
 import Toast, { ToastProps } from './components/Toast';
 import TransactionDetailView from './components/reports/TransactionDetailView';
+import ConfigurationErrorPage from './pages/ConfigurationErrorPage';
+import LoginPage from './pages/LoginPage';
 
 
 export type Page = 'home' | 'transactions' | 'reports' | 'settings';
@@ -130,10 +146,12 @@ const EditTransactionForm: React.FC<EditTransactionFormProps> = ({ transaction, 
 
 
 const App: React.FC = () => {
-  const [transactions, setTransactions] = useState<Transaction[]>(() => getStoredTransactions());
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [currentPage, setCurrentPage] = useState<Page>('home');
-  const [categories, setCategories] = useState<string[]>(() => getStoredCategories());
-
+  const [categories, setCategories] = useState<string[]>([]);
+  
   const [modalState, setModalState] = useState<Omit<ModalProps, 'onClose'>>({ isOpen: false, title: '', children: null });
   const [toastState, setToastState] = useState<Omit<ToastProps, 'onClose'>>({ isVisible: false, message: '' });
   
@@ -141,16 +159,43 @@ const App: React.FC = () => {
     setToastState({ isVisible: true, message, type });
   }, []);
 
-  // Persist transactions to localStorage whenever they change.
-  useEffect(() => {
-    setStoredTransactions(transactions);
-  }, [transactions]);
+  const fetchInitialData = useCallback(async () => {
+    try {
+      const { transactions, categories } = await getInitialData();
+      setTransactions(transactions);
+      setCategories(categories);
+    } catch (error) {
+      console.error('Error fetching initial data:', error);
+      showToast('Failed to load your data. Please try again.', 'error');
+    }
+  }, [showToast]);
 
-  // Persist categories to localStorage whenever they change.
   useEffect(() => {
-    setStoredCategories(categories);
-  }, [categories]);
+    if (isSupabaseConfigured) {
+        getSupabaseSession().then(({ data: { session } }) => {
+            setSession(session);
+            setIsLoading(false);
+        });
+
+        const { data: { subscription } } = onAuthStateChange((_event, session) => {
+            setSession(session);
+        });
+
+        return () => subscription.unsubscribe();
+    } else {
+        setIsLoading(false);
+    }
+  }, []);
   
+  useEffect(() => {
+    if (session) {
+        fetchInitialData();
+    } else {
+        setTransactions([]);
+        setCategories([]);
+    }
+  }, [session, fetchInitialData]);
+
   // Toast visibility timer
   useEffect(() => {
     if (toastState.isVisible) {
@@ -189,35 +234,46 @@ const App: React.FC = () => {
     [...new Set(transactions.flatMap(t => t.items.map(i => i.description.trim())).filter(Boolean))]
   ), [transactions]);
 
-  const addTransaction = (transaction: Omit<Transaction, 'id' | 'date'>) => {
+  const addTransaction = async (transaction: Omit<Transaction, 'id' | 'date'>) => {
     const newTransaction: Transaction = {
       ...transaction,
-      id: new Date().getTime().toString(),
+      id: crypto.randomUUID(), // Temp ID, DB will assign real one
       date: new Date().toISOString(),
-      items: transaction.items.map(item => ({...item, id: new Date().getTime().toString() + Math.random()})),
+      items: transaction.items.map(item => ({...item, id: crypto.randomUUID()})),
     };
 
-    const updatedTransactions = [newTransaction, ...transactions]
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    
-    setTransactions(updatedTransactions);
-    showToast('Transaction added successfully!');
+    try {
+        await supabaseAddTransaction(newTransaction);
+        showToast('Transaction added successfully!');
+        await fetchInitialData(); // Refresh data from DB
+    } catch(error) {
+        console.error("Failed to add transaction:", error);
+        showToast('Error adding transaction.', 'error');
+    }
   };
 
-  const updateTransaction = (updatedTransaction: Transaction) => {
-    const updatedTransactions = transactions
-      .map(t => (t.id === updatedTransaction.id ? updatedTransaction : t))
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    
-    setTransactions(updatedTransactions);
-    showToast('Transaction updated successfully!');
+  const updateTransaction = async (updatedTransaction: Transaction) => {
+    try {
+        await supabaseUpdateTransaction(updatedTransaction);
+        showToast('Transaction updated successfully!');
+        await fetchInitialData();
+    } catch(error) {
+        console.error("Failed to update transaction:", error);
+        showToast('Error updating transaction.', 'error');
+    }
   };
 
-  const deleteTransactionInDB = (id: string) => {
-    const updatedTransactions = transactions.filter(t => t.id !== id);
-    setTransactions(updatedTransactions);
-    closeModal();
-    showToast('Transaction deleted.', 'success');
+  const deleteTransactionFromDB = async (id: string) => {
+    try {
+        await supabaseDeleteTransaction(id);
+        closeModal();
+        showToast('Transaction deleted.', 'success');
+        await fetchInitialData();
+    } catch(error) {
+        console.error("Failed to delete transaction:", error);
+        closeModal();
+        showToast('Error deleting transaction.', 'error');
+    }
   }
 
   const deleteTransaction = (id: string) => {
@@ -225,26 +281,38 @@ const App: React.FC = () => {
         title: 'Delete Transaction',
         children: <p>Are you sure you want to delete this transaction? This action cannot be undone.</p>,
         confirmText: 'Delete',
-        onConfirm: () => deleteTransactionInDB(id),
+        onConfirm: () => deleteTransactionFromDB(id),
         confirmVariant: 'danger'
      });
   };
   
-  const addCategory = (category: string) => {
+  const addCategory = async (category: string) => {
+    if (!session) return showToast('You must be logged in.', 'error');
     if (category && !categories.find(c => c.toLowerCase() === category.toLowerCase())) {
-        const updatedCategories = [...categories, category].sort();
-        setCategories(updatedCategories);
-        showToast(`Category "${category}" added.`);
+        try {
+            await supabaseAddCategory(category, session.user.id);
+            showToast(`Category "${category}" added.`);
+            await fetchInitialData();
+        } catch(error) {
+            console.error("Failed to add category:", error);
+            showToast('Error adding category.', 'error');
+        }
     } else if (category) {
         showToast(`Category "${category}" already exists.`, 'error');
     }
   };
 
-  const deleteCategoryFromDB = (categoryToDelete: string) => {
-    const updatedCategories = categories.filter(c => c !== categoryToDelete);
-    setCategories(updatedCategories);
-    closeModal();
-    showToast(`Category "${categoryToDelete}" deleted.`);
+  const deleteCategoryFromDB = async (categoryToDelete: string) => {
+     if (!session) return showToast('You must be logged in.', 'error');
+     try {
+        await supabaseDeleteCategory(categoryToDelete, session.user.id);
+        closeModal();
+        showToast(`Category "${categoryToDelete}" deleted.`);
+        await fetchInitialData();
+     } catch(error) {
+        console.error("Failed to delete category:", error);
+        showToast('Error deleting category.', 'error');
+     }
   };
 
   const deleteCategory = (categoryToDelete: string) => {
@@ -265,21 +333,14 @@ const App: React.FC = () => {
     });
   };
 
-  const handleResetData = () => {
-    showModal({
-        title: 'Reset All Data',
-        children: <p>Are you sure you want to delete all transactions and custom categories? This action cannot be undone.</p>,
-        confirmText: 'Reset',
-        onConfirm: () => {
-            clearAllData();
-            setTransactions([]);
-            // Reload categories to get defaults
-            setCategories(getStoredCategories());
-            closeModal();
-            showToast('All data has been reset.', 'success');
-        },
-        confirmVariant: 'danger'
-    });
+  const handleSignOut = async () => {
+    try {
+        await signOut();
+        showToast("You've been signed out.");
+    } catch(error) {
+        console.error("Failed to sign out:", error);
+        showToast("Error signing out.", 'error');
+    }
   };
   
   const handleStartEdit = (transaction: Transaction) => {
@@ -313,6 +374,22 @@ const App: React.FC = () => {
     });
   };
 
+  if (!isSupabaseConfigured) {
+    return <ConfigurationErrorPage />;
+  }
+  
+  if (isLoading) {
+    return (
+        <div className="flex items-center justify-center min-h-screen bg-gray-100">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-brand-primary"></div>
+        </div>
+    );
+  }
+
+  if (!session) {
+    return <LoginPage />;
+  }
+
   const renderPage = () => {
     switch (currentPage) {
       case 'home':
@@ -339,7 +416,7 @@ const App: React.FC = () => {
                 />;
       case 'settings':
         return <SettingsPage 
-                    onResetData={handleResetData}
+                    onSignOut={handleSignOut}
                     categories={categories}
                     onAddCategory={addCategory}
                     onDeleteCategory={deleteCategory}
