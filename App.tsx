@@ -27,6 +27,7 @@ import Toast, { ToastProps } from './components/Toast';
 import TransactionDetailView from './components/reports/TransactionDetailView';
 import ConfigurationErrorPage from './pages/ConfigurationErrorPage';
 import LoginPage from './pages/LoginPage';
+import TroubleshootingGuide from './components/TroubleshootingGuide';
 
 
 export type Page = 'home' | 'transactions' | 'reports' | 'settings';
@@ -159,16 +160,48 @@ const App: React.FC = () => {
     setToastState({ isVisible: true, message, type });
   }, []);
 
+  const showModal = useCallback((config: Omit<ModalProps, 'isOpen' | 'onClose'>) => {
+    setModalState({ isOpen: true, ...config });
+  }, []);
+
+  const closeModal = useCallback(() => {
+    setModalState(prev => ({...prev, isOpen: false}));
+  }, []);
+  
   const fetchInitialData = useCallback(async () => {
     try {
       const { transactions, categories } = await getInitialData();
       setTransactions(transactions);
       setCategories(categories);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching initial data:', error);
-      showToast('Failed to load your data. Please try again.', 'error');
+      
+      const errorMessage = error.message || 'An unknown error occurred.';
+      const isRlsError = errorMessage.toLowerCase().includes('policy') || errorMessage.toLowerCase().includes('rls');
+
+      showModal({
+          title: 'Failed to Load Data',
+          children: (
+            <div className="space-y-4">
+                <p>We couldn't fetch your data from the database. This is often due to a misconfiguration in the database security policies.</p>
+                <div className="bg-red-50 text-red-700 p-3 rounded-md border border-red-200 text-sm">
+                    <p className="font-bold">Error Details:</p>
+                    <p className="font-mono text-xs">{errorMessage}</p>
+                </div>
+                {isRlsError && (
+                    <p className="text-sm font-semibold text-brand-dark">This error strongly suggests a Row Level Security (RLS) issue. Please review the policies on your tables.</p>
+                )}
+                <details className="bg-gray-50 rounded-md border">
+                    <summary className="p-2 cursor-pointer font-semibold text-sm text-brand-dark">View Troubleshooting Guide</summary>
+                    <div className="p-2 border-t max-h-64 overflow-y-auto">
+                        <TroubleshootingGuide />
+                    </div>
+                </details>
+            </div>
+          ),
+      });
     }
-  }, [showToast]);
+  }, [showModal]);
 
   useEffect(() => {
     if (isSupabaseConfigured) {
@@ -203,14 +236,6 @@ const App: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [toastState.isVisible]);
-
-  const showModal = (config: Omit<ModalProps, 'isOpen' | 'onClose'>) => {
-    setModalState({ isOpen: true, ...config });
-  };
-
-  const closeModal = () => {
-    setModalState(prev => ({...prev, isOpen: false}));
-  };
   
   const { totalSales, totalExpenses, netProfit } = useMemo(() => {
     const sales = transactions
