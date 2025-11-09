@@ -32,6 +32,7 @@ const ReportMenuItem: React.FC<{ title: string, description: string, onClick: ()
 const ReportsPage: React.FC<ReportsPageProps> = ({ transactions, categories, onTransactionClick }) => {
   const [currentView, setCurrentView] = useState<ReportView>('menu');
 
+
   const handleBack = () => setCurrentView('menu');
 
   if (currentView === 'transaction_log') {

@@ -1,29 +1,17 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { 
-    getInitialData,
-    addTransaction as storageAddTransaction,
-    updateTransaction as storageUpdateTransaction,
-    deleteTransaction as storageDeleteTransaction,
-    addCategory as storageAddCategory,
-    deleteCategory as storageDeleteCategory,
-    clearAllData as storageClearAllData,
-} from './services/storageService';
-
+import { loadData, saveTransactions, saveCategories } from './services/supabase';
 import { Transaction, TransactionLineItem } from './types';
-import { PAYMENT_METHODS } from './constants';
+import { INITIAL_CATEGORIES, PAYMENT_METHODS } from './constants';
 import { calculateTotalAmount } from './utils/transactionUtils';
-
 import BottomNav from './components/SideNav';
 import HomePage from './pages/HomePage';
 import TransactionsPage from './pages/TransactionsPage';
 import ReportsPage from './pages/ReportsPage';
-import SettingsPage from './pages/SettingsPage';
 import Modal, { ModalProps } from './components/Modal';
 import Toast, { ToastProps } from './components/Toast';
 import TransactionDetailView from './components/reports/TransactionDetailView';
 
-
-export type Page = 'home' | 'transactions' | 'reports' | 'settings';
+export type Page = 'home' | 'transactions' | 'reports';
 
 // Placed here to avoid creating a new file, as per user constraints.
 interface EditTransactionFormProps {
@@ -142,45 +130,40 @@ const EditTransactionForm: React.FC<EditTransactionFormProps> = ({ transaction, 
 const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [currentPage, setCurrentPage] = useState<Page>('home');
-  const [categories, setCategories] = useState<string[]>([]);
-  
+  const [categories, setCategories] = useState<string[]>(INITIAL_CATEGORIES);
+
   const [modalState, setModalState] = useState<Omit<ModalProps, 'onClose'>>({ isOpen: false, title: '', children: null });
   const [toastState, setToastState] = useState<Omit<ToastProps, 'onClose'>>({ isVisible: false, message: '' });
   
-  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToastState({ isVisible: true, message, type });
-  }, []);
-
-  const showModal = useCallback((config: Omit<ModalProps, 'isOpen' | 'onClose'>) => {
-    setModalState({ isOpen: true, ...config });
-  }, []);
-
-  const closeModal = useCallback(() => {
-    setModalState(prev => ({...prev, isOpen: false}));
-  }, []);
+  };
   
+  // Load data from local storage on mount
   useEffect(() => {
-    const loadInitialData = async () => {
-        try {
-            const { transactions, categories } = await getInitialData();
-            setTransactions(transactions);
-            setCategories(categories);
-        } catch (error) {
-            console.error("Failed to load initial data:", error);
-            showToast("Could not load data from the database.", "error");
-        }
-    };
-    loadInitialData();
-  }, [showToast]);
+    const { transactions: loadedTransactions, categories: loadedCategories, isNewUser } = loadData();
+    setTransactions(loadedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    setCategories(loadedCategories.sort());
+    if (isNewUser) {
+        showToast('Welcome! We added some sample data for you.', 'success');
+    }
+  }, []);
 
-  // Toast visibility timer
   useEffect(() => {
     if (toastState.isVisible) {
       const timer = setTimeout(() => setToastState(prev => ({...prev, isVisible: false})), 3000);
       return () => clearTimeout(timer);
     }
   }, [toastState.isVisible]);
-  
+
+  const showModal = (config: Omit<ModalProps, 'isOpen' | 'onClose'>) => {
+    setModalState({ isOpen: true, ...config });
+  };
+
+  const closeModal = () => {
+    setModalState(prev => ({...prev, isOpen: false}));
+  };
+
   const { totalSales, totalExpenses, netProfit } = useMemo(() => {
     const sales = transactions
       .filter(t => t.type === 'sale')
@@ -206,30 +189,35 @@ const App: React.FC = () => {
   const addTransaction = async (transaction: Omit<Transaction, 'id' | 'date'>) => {
     const newTransaction: Transaction = {
       ...transaction,
-      id: crypto.randomUUID(),
+      id: new Date().getTime().toString(),
       date: new Date().toISOString(),
-      items: transaction.items.map(item => ({...item, id: crypto.randomUUID()})),
+      items: transaction.items.map(item => ({...item, id: new Date().getTime().toString() + Math.random()})),
     };
 
-    await storageAddTransaction(newTransaction);
-    setTransactions(prev => [newTransaction, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+    const updatedTransactions = [newTransaction, ...transactions]
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    setTransactions(updatedTransactions);
+    saveTransactions(updatedTransactions);
     showToast('Transaction added successfully!');
   };
 
   const updateTransaction = async (updatedTransaction: Transaction) => {
-    await storageUpdateTransaction(updatedTransaction);
-    setTransactions(prev => prev
-        .map(t => t.id === updatedTransaction.id ? updatedTransaction : t)
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    );
+     const updatedTransactions = transactions
+      .map(t => (t.id === updatedTransaction.id ? updatedTransaction : t))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    
+    setTransactions(updatedTransactions);
+    saveTransactions(updatedTransactions);
     showToast('Transaction updated successfully!');
   };
 
-  const deleteTransactionFromStorage = async (id: string) => {
-    await storageDeleteTransaction(id);
-    setTransactions(prev => prev.filter(t => t.id !== id));
-    closeModal();
+  const deleteTransactionInDB = async (id: string) => {
+    const updatedTransactions = transactions.filter(t => t.id !== id);
+    setTransactions(updatedTransactions);
+    saveTransactions(updatedTransactions);
     showToast('Transaction deleted.', 'success');
+    closeModal();
   }
 
   const deleteTransaction = (id: string) => {
@@ -237,27 +225,28 @@ const App: React.FC = () => {
         title: 'Delete Transaction',
         children: <p>Are you sure you want to delete this transaction? This action cannot be undone.</p>,
         confirmText: 'Delete',
-        onConfirm: () => deleteTransactionFromStorage(id),
+        onConfirm: () => deleteTransactionInDB(id),
         confirmVariant: 'danger'
      });
   };
   
   const addCategory = async (category: string) => {
-    if (!category) return;
-    const success = await storageAddCategory(category);
-    if (success) {
-        setCategories(prev => [...prev, category].sort((a, b) => a.localeCompare(b)));
+    if (category && !categories.find(c => c.toLowerCase() === category.toLowerCase())) {
+        const updatedCategories = [...categories, category].sort();
+        setCategories(updatedCategories);
+        saveCategories(updatedCategories);
         showToast(`Category "${category}" added.`);
-    } else {
+    } else if (category) {
         showToast(`Category "${category}" already exists.`, 'error');
     }
   };
 
-  const deleteCategoryFromStorage = async (categoryToDelete: string) => {
-    await storageDeleteCategory(categoryToDelete);
-    setCategories(prev => prev.filter(c => c !== categoryToDelete));
-    closeModal();
+  const deleteCategoryFromDB = async (categoryToDelete: string) => {
+    const updatedCategories = categories.filter(c => c !== categoryToDelete);
+    setCategories(updatedCategories);
+    saveCategories(updatedCategories);
     showToast(`Category "${categoryToDelete}" deleted.`);
+    closeModal();
   };
 
   const deleteCategory = (categoryToDelete: string) => {
@@ -273,33 +262,11 @@ const App: React.FC = () => {
         title: 'Delete Category',
         children: <p>Are you sure you want to delete the category "{categoryToDelete}"?</p>,
         confirmText: 'Delete',
-        onConfirm: () => deleteCategoryFromStorage(categoryToDelete),
+        onConfirm: () => deleteCategoryFromDB(categoryToDelete),
         confirmVariant: 'danger'
     });
   };
-
-  const clearAllData = () => {
-    showModal({
-        title: 'Clear All Data',
-        children: (
-            <div>
-                <p>Are you sure you want to permanently delete all your data?</p>
-                <p className="mt-2 font-semibold text-brand-accent">This includes all transactions and custom categories. This action cannot be undone.</p>
-            </div>
-        ),
-        confirmText: 'Yes, Delete Everything',
-        onConfirm: async () => {
-            await storageClearAllData();
-            const initialData = await getInitialData();
-            setTransactions(initialData.transactions);
-            setCategories(initialData.categories);
-            closeModal();
-            showToast('All application data has been cleared.', 'success');
-        },
-        confirmVariant: 'danger'
-    });
-  };
-
+  
   const handleStartEdit = (transaction: Transaction) => {
     showModal({
       title: 'Edit Transaction',
@@ -324,6 +291,7 @@ const App: React.FC = () => {
                   onEdit={() => handleStartEdit(transaction)}
                   onDelete={() => {
                     closeModal();
+                    // This now calls the modal version of delete
                     deleteTransaction(transaction.id);
                   }}
                 />,
@@ -355,14 +323,6 @@ const App: React.FC = () => {
                   categories={categories} 
                   onTransactionClick={handleViewTransaction}
                 />;
-      case 'settings':
-        return <SettingsPage 
-                    categories={categories}
-                    transactions={transactions}
-                    onAddCategory={addCategory}
-                    onDeleteCategory={deleteCategory}
-                    onClearAllData={clearAllData}
-                />;
       default:
         return <HomePage 
                   stats={{ totalSales, totalExpenses, netProfit }} 
@@ -375,11 +335,9 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-gray-100">
       <header className="bg-white shadow-sm p-4 border-b border-gray-200 text-center sticky top-0 z-10">
-          <div className="flex items-center justify-center relative">
-            <h1 className="text-xl md:text-2xl font-bold text-brand-primary">
-            GB Finance 2.0
-            </h1>
-          </div>
+          <h1 className="text-xl md:text-2xl font-bold text-brand-primary">
+          GB Finance 2.0
+          </h1>
       </header>
       
       <main className="container mx-auto p-4 md:p-6 lg:p-8 pb-24">
