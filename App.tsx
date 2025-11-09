@@ -160,10 +160,18 @@ const App: React.FC = () => {
   }, []);
   
   useEffect(() => {
-    const { transactions, categories } = getInitialData();
-    setTransactions(transactions);
-    setCategories(categories);
-  }, []);
+    const loadInitialData = async () => {
+        try {
+            const { transactions, categories } = await getInitialData();
+            setTransactions(transactions);
+            setCategories(categories);
+        } catch (error) {
+            console.error("Failed to load initial data:", error);
+            showToast("Could not load data from the database.", "error");
+        }
+    };
+    loadInitialData();
+  }, [showToast]);
 
   // Toast visibility timer
   useEffect(() => {
@@ -195,7 +203,7 @@ const App: React.FC = () => {
     [...new Set(transactions.flatMap(t => t.items.map(i => i.description.trim())).filter(Boolean))]
   ), [transactions]);
 
-  const addTransaction = (transaction: Omit<Transaction, 'id' | 'date'>) => {
+  const addTransaction = async (transaction: Omit<Transaction, 'id' | 'date'>) => {
     const newTransaction: Transaction = {
       ...transaction,
       id: crypto.randomUUID(),
@@ -203,15 +211,13 @@ const App: React.FC = () => {
       items: transaction.items.map(item => ({...item, id: crypto.randomUUID()})),
     };
 
-    storageAddTransaction(newTransaction);
-    // Update state directly for better performance
-    setTransactions(prev => [newTransaction, ...prev]);
+    await storageAddTransaction(newTransaction);
+    setTransactions(prev => [newTransaction, ...prev].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     showToast('Transaction added successfully!');
   };
 
-  const updateTransaction = (updatedTransaction: Transaction) => {
-    storageUpdateTransaction(updatedTransaction);
-    // Update state directly and re-sort in case date was changed
+  const updateTransaction = async (updatedTransaction: Transaction) => {
+    await storageUpdateTransaction(updatedTransaction);
     setTransactions(prev => prev
         .map(t => t.id === updatedTransaction.id ? updatedTransaction : t)
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -219,9 +225,8 @@ const App: React.FC = () => {
     showToast('Transaction updated successfully!');
   };
 
-  const deleteTransactionFromStorage = (id: string) => {
-    storageDeleteTransaction(id);
-    // Update state directly
+  const deleteTransactionFromStorage = async (id: string) => {
+    await storageDeleteTransaction(id);
     setTransactions(prev => prev.filter(t => t.id !== id));
     closeModal();
     showToast('Transaction deleted.', 'success');
@@ -237,11 +242,10 @@ const App: React.FC = () => {
      });
   };
   
-  const addCategory = (category: string) => {
+  const addCategory = async (category: string) => {
     if (!category) return;
-    const success = storageAddCategory(category);
+    const success = await storageAddCategory(category);
     if (success) {
-        // Update state directly
         setCategories(prev => [...prev, category].sort((a, b) => a.localeCompare(b)));
         showToast(`Category "${category}" added.`);
     } else {
@@ -249,9 +253,8 @@ const App: React.FC = () => {
     }
   };
 
-  const deleteCategoryFromStorage = (categoryToDelete: string) => {
-    storageDeleteCategory(categoryToDelete);
-    // Update state directly
+  const deleteCategoryFromStorage = async (categoryToDelete: string) => {
+    await storageDeleteCategory(categoryToDelete);
     setCategories(prev => prev.filter(c => c !== categoryToDelete));
     closeModal();
     showToast(`Category "${categoryToDelete}" deleted.`);
@@ -285,9 +288,9 @@ const App: React.FC = () => {
             </div>
         ),
         confirmText: 'Yes, Delete Everything',
-        onConfirm: () => {
-            storageClearAllData();
-            const initialData = getInitialData();
+        onConfirm: async () => {
+            await storageClearAllData();
+            const initialData = await getInitialData();
             setTransactions(initialData.transactions);
             setCategories(initialData.categories);
             closeModal();
