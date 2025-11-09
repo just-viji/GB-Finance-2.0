@@ -59,6 +59,47 @@ export const setStoredCategories = (categories: string[]): void => {
   }
 };
 
+export const getInitialData = () => {
+    const transactions = getStoredTransactions().sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const categories = getStoredCategories();
+    return { transactions, categories };
+};
+
+export const addTransaction = (transaction: Transaction) => {
+    const transactions = getStoredTransactions();
+    // Prepend new transaction. It will be the newest. The initial fetch handles sorting.
+    setStoredTransactions([transaction, ...transactions]);
+};
+
+export const updateTransaction = (updatedTransaction: Transaction) => {
+    let transactions = getStoredTransactions();
+    transactions = transactions.map(t => t.id === updatedTransaction.id ? updatedTransaction : t);
+    setStoredTransactions(transactions);
+};
+
+export const deleteTransaction = (id: string) => {
+    let transactions = getStoredTransactions();
+    transactions = transactions.filter(t => t.id !== id);
+    setStoredTransactions(transactions);
+};
+
+export const addCategory = (category: string): boolean => {
+    const categories = getStoredCategories();
+    if (!categories.find(c => c.toLowerCase() === category.toLowerCase())) {
+        categories.push(category);
+        categories.sort((a, b) => a.localeCompare(b));
+        setStoredCategories(categories);
+        return true;
+    }
+    return false;
+};
+
+export const deleteCategory = (categoryToDelete: string) => {
+    let categories = getStoredCategories();
+    categories = categories.filter(c => c !== categoryToDelete);
+    setStoredCategories(categories);
+};
+
 export const clearAllData = (): void => {
     localStorage.removeItem(TRANSACTIONS_KEY);
     localStorage.removeItem(CATEGORIES_KEY);

@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Transaction } from '../types';
 import { PAYMENT_METHODS } from '../constants';
-import { calculateTotalAmount } from '../utils/transactionUtils';
+import { calculateTotalAmount, getMonthDateRange } from '../utils/transactionUtils';
 import EmptyState from './EmptyState';
 
 interface TransactionLogReportProps {
@@ -12,24 +12,6 @@ interface TransactionLogReportProps {
 }
 
 const TransactionLogReport: React.FC<TransactionLogReportProps> = ({ transactions, categories, onTransactionClick, onBack }) => {
-  const getMonthDateRange = () => {
-    const today = new Date();
-    const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
-    const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    // This function formats a date to 'YYYY-MM-DD' in the local timezone,
-    // avoiding the conversion issues of toISOString().
-    const formatDate = (date: Date) => {
-        const year = date.getFullYear();
-        const month = (date.getMonth() + 1).toString().padStart(2, '0');
-        const day = date.getDate().toString().padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    };
-    return {
-        startDate: formatDate(firstDay),
-        endDate: formatDate(lastDay)
-    };
-  };
-  
   const [filters, setFilters] = useState({
     type: 'all',
     category: 'all',
