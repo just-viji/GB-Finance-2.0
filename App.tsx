@@ -1,5 +1,15 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { loadData, saveTransactions, saveCategories } from './services/localStorageService';
+import {
+    addCategory as addCategoryToSupabase,
+    deleteCategory as deleteCategoryFromSupabase,
+    getTransactions as getTransactionsFromSupabase,
+    getCategories as getCategoriesFromSupabase,
+    addTransaction as addTransactionToSupabase, 
+    updateTransaction as updateTransactionInSupabase,
+    deleteTransaction as deleteTransactionFromSupabase,
+    getCurrentUser,
+    signOut
+} from './services/supabase';
 import { Transaction, TransactionLineItem } from './types';
 import { INITIAL_CATEGORIES, PAYMENT_METHODS } from './constants';
 import { calculateTotalAmount } from './utils/transactionUtils';
@@ -11,7 +21,8 @@ import SettingsPage from './pages/SettingsPage';
 import Modal, { ModalProps } from './components/Modal';
 import Toast, { ToastProps } from './components/Toast';
 import TransactionDetailView from './components/reports/TransactionDetailView';
-import { checkSupabaseConnection } from './services/checkSupabase';
+import LoginPage from './pages/LoginPage';
+
 
 export type Page = 'home' | 'transactions' | 'reports' | 'settings';
 
@@ -133,6 +144,10 @@ const App: React.FC = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [categories, setCategories] = useState<string[]>(INITIAL_CATEGORIES);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
+
 
   const [modalState, setModalState] = useState<Omit<ModalProps, 'onClose'>>({ isOpen: false, title: '', children: null });
   const [toastState, setToastState] = useState<Omit<ToastProps, 'onClose'>>({ isVisible: false, message: '' });
@@ -140,17 +155,40 @@ const App: React.FC = () => {
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToastState({ isVisible: true, message, type });
   };
+
+  useEffect(() => {
+    const checkUser = async () => {
+        try {
+            const currentUser = await getCurrentUser();
+            setUser(currentUser);
+        } catch (error) {
+            // Not handling error, assuming it means user is not logged in
+        } finally {
+            setIsAuthLoading(false);
+        }
+    };
+    checkUser();
+}, []);
   
   // Load data from local storage on mount
   useEffect(() => {
-    checkSupabaseConnection();
-    const { transactions: loadedTransactions, categories: loadedCategories, isNewUser } = loadData();
-    setTransactions(loadedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    setCategories(loadedCategories.sort());
-    if (isNewUser) {
-        showToast('Welcome! We added some sample data for you.', 'success');
-    }
-  }, []);
+    const loadData = async () => {
+        if (!user) return;
+        try {
+            const [loadedTransactions, loadedCategories] = await Promise.all([
+                getTransactionsFromSupabase(),
+                getCategoriesFromSupabase(),
+            ]);
+            setTransactions((loadedTransactions as Transaction[]).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+            setCategories((loadedCategories as string[]).sort());
+        } catch (error) {
+            showToast('Error fetching data', 'error');
+        } finally {
+            setIsDataLoaded(true);
+        }
+    };
+    loadData();
+  }, [user]);
 
   useEffect(() => {
     if (toastState.isVisible) {
@@ -190,37 +228,50 @@ const App: React.FC = () => {
   ), [transactions]);
 
   const addTransaction = async (transaction: Omit<Transaction, 'id' | 'date'>) => {
-    const newTransaction: Transaction = {
-      ...transaction,
-      id: new Date().getTime().toString(),
-      date: new Date().toISOString(),
-      items: transaction.items.map(item => ({...item, id: new Date().getTime().toString() + Math.random()})),
-    };
+    try {
+        const newTransaction: Omit<Transaction, 'id'> = {
+            ...transaction,
+            date: new Date().toISOString(),
+            items: transaction.items.map(item => ({...item, id: new Date().getTime().toString() + Math.random()})),
+        };
+        
+        const returnedTransaction = await addTransactionToSupabase(newTransaction);
 
-    const updatedTransactions = [newTransaction, ...transactions]
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    
-    setTransactions(updatedTransactions);
-    saveTransactions(updatedTransactions);
-    showToast('Transaction added successfully!');
+        const updatedTransactions = [returnedTransaction[0], ...transactions]
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        setTransactions(updatedTransactions);
+        showToast('Transaction added successfully!');
+    } catch (error) {
+        showToast('Error adding transaction', 'error');
+    }
   };
 
   const updateTransaction = async (updatedTransaction: Transaction) => {
-     const updatedTransactions = transactions
-      .map(t => (t.id === updatedTransaction.id ? updatedTransaction : t))
-      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    
-    setTransactions(updatedTransactions);
-    saveTransactions(updatedTransactions);
-    showToast('Transaction updated successfully!');
+    try {
+        await updateTransactionInSupabase(updatedTransaction);
+        const updatedTransactions = transactions
+            .map(t => (t.id === updatedTransaction.id ? updatedTransaction : t))
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        setTransactions(updatedTransactions);
+        showToast('Transaction updated successfully!');
+    } catch (error) {
+        showToast('Error updating transaction', 'error');
+    }
   };
 
   const deleteTransactionInDB = async (id: string) => {
-    const updatedTransactions = transactions.filter(t => t.id !== id);
-    setTransactions(updatedTransactions);
-    saveTransactions(updatedTransactions);
-    showToast('Transaction deleted.', 'success');
-    closeModal();
+    try {
+        await deleteTransactionFromSupabase(id);
+        const updatedTransactions = transactions.filter(t => t.id !== id);
+        setTransactions(updatedTransactions);
+        showToast('Transaction deleted.', 'success');
+        closeModal();
+    } catch (error) {
+        showToast('Error deleting transaction', 'error');
+        closeModal();
+    }
   }
 
   const deleteTransaction = (id: string) => {
@@ -235,21 +286,30 @@ const App: React.FC = () => {
   
   const addCategory = async (category: string) => {
     if (category && !categories.find(c => c.toLowerCase() === category.toLowerCase())) {
-        const updatedCategories = [...categories, category].sort();
-        setCategories(updatedCategories);
-        saveCategories(updatedCategories);
-        showToast(`Category "${category}" added.`);
+        try {
+            await addCategoryToSupabase(category);
+            const updatedCategories = [...categories, category].sort();
+            setCategories(updatedCategories);
+            showToast(`Category "${category}" added.`);
+        } catch (error) {
+            showToast('Error adding category', 'error');
+        }
     } else if (category) {
         showToast(`Category "${category}" already exists.`, 'error');
     }
   };
 
   const deleteCategoryFromDB = async (categoryToDelete: string) => {
-    const updatedCategories = categories.filter(c => c !== categoryToDelete);
-    setCategories(updatedCategories);
-    saveCategories(updatedCategories);
-    showToast(`Category "${categoryToDelete}" deleted.`);
-    closeModal();
+    try {
+        await deleteCategoryFromSupabase(categoryToDelete);
+        const updatedCategories = categories.filter(c => c !== categoryToDelete);
+        setCategories(updatedCategories);
+        showToast(`Category "${categoryToDelete}" deleted.`);
+        closeModal();
+    } catch (error) {
+        showToast('Error deleting category', 'error');
+        closeModal();
+    }
   };
 
   const deleteCategory = (categoryToDelete: string) => {
@@ -302,7 +362,20 @@ const App: React.FC = () => {
     });
   };
 
+  const handleLogout = async () => {
+    await signOut();
+    setUser(null);
+    setTransactions([]);
+    setCategories([]);
+    setIsDataLoaded(false);
+    setCurrentPage('home');
+    showToast('You have been logged out.');
+  };
+
   const renderPage = () => {
+    if (!isDataLoaded) {
+        return <div className="flex justify-center items-center h-64"><p>Loading...</p></div>;
+    }
     switch (currentPage) {
       case 'home':
         return <HomePage 
@@ -327,7 +400,7 @@ const App: React.FC = () => {
                   onTransactionClick={handleViewTransaction}
                 />;
       case 'settings':
-        return <SettingsPage transactions={transactions} />;
+        return <SettingsPage transactions={transactions} onLogout={handleLogout} />;
       default:
         return <HomePage 
                   stats={{ totalSales, totalExpenses, netProfit }} 
@@ -336,6 +409,14 @@ const App: React.FC = () => {
                 />;
     }
   };
+
+  if (isAuthLoading) {
+    return <div className="flex justify-center items-center h-screen"><p>Loading...</p></div>;
+  }
+
+  if (!user) {
+      return <LoginPage showToast={showToast} setUser={setUser} />;
+  }
 
   return (
     <div className="min-h-screen bg-gray-100">

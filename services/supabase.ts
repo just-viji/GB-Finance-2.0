@@ -50,9 +50,16 @@ export const getTransactions = async () => {
 };
 
 export const addTransaction = async (transaction: Omit<Transaction, 'id'>) => {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("User not authenticated to add transaction.");
+
+  const transactionWithUser = { ...transaction, user_id: user.id };
+
   const { data, error } = await supabase
     .from('transactions')
-    .insert([transaction]);
+    .insert([transactionWithUser])
+    .select();
+
   if (error) throw error;
   return data;
 };
@@ -66,9 +73,39 @@ export const getCategories = async () => {
 };
 
 export const addCategory = async (category: string) => {
+  const user = await getCurrentUser();
+  if (!user) throw new Error("User not authenticated");
+
   const { data, error } = await supabase
     .from('categories')
-    .insert([{ name: category }]);
+    .insert([{ name: category, user_id: user.id }]);
   if (error) throw error;
   return data;
 };
+
+export const deleteCategory = async (categoryName: string) => {
+    const { data, error } = await supabase
+        .from('categories')
+        .delete()
+        .eq('name', categoryName);
+    if (error) throw error;
+    return data;
+}
+
+export const updateTransaction = async (transaction: Transaction) => {
+    const { data, error } = await supabase
+        .from('transactions')
+        .update(transaction)
+        .eq('id', transaction.id);
+    if (error) throw error;
+    return data;
+}
+
+export const deleteTransaction = async (transactionId: string) => {
+    const { data, error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', transactionId);
+    if (error) throw error;
+    return data;
+}
