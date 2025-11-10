@@ -42,9 +42,12 @@ export const getCurrentUser = async () => {
 
 // Data Functions
 export const getTransactions = async () => {
+  const user = await getCurrentUser();
+  if (!user) return [];
   const { data, error } = await supabase
     .from('transactions')
-    .select('*');
+    .select('*')
+    .eq('user_id', user.id);
   if (error) throw error;
   return data;
 };
@@ -65,9 +68,12 @@ export const addTransaction = async (transaction: Omit<Transaction, 'id'>) => {
 };
 
 export const getCategories = async () => {
+  const user = await getCurrentUser();
+  if (!user) return [];
   const { data, error } = await supabase
     .from('categories')
-    .select('name');
+    .select('name')
+    .eq('user_id', user.id);
   if (error) throw error;
   return data?.map(c => c.name) || [];
 };
@@ -84,28 +90,37 @@ export const addCategory = async (category: string) => {
 };
 
 export const deleteCategory = async (categoryName: string) => {
+    const user = await getCurrentUser();
+    if (!user) throw new Error("User not authenticated");
     const { data, error } = await supabase
         .from('categories')
         .delete()
-        .eq('name', categoryName);
+        .eq('name', categoryName)
+        .eq('user_id', user.id);
     if (error) throw error;
     return data;
 }
 
 export const updateTransaction = async (transaction: Transaction) => {
+    const user = await getCurrentUser();
+    if (!user) throw new Error("User not authenticated");
     const { data, error } = await supabase
         .from('transactions')
         .update(transaction)
-        .eq('id', transaction.id);
+        .eq('id', transaction.id)
+        .eq('user_id', user.id);
     if (error) throw error;
     return data;
 }
 
 export const deleteTransaction = async (transactionId: string) => {
+    const user = await getCurrentUser();
+    if (!user) throw new Error("User not authenticated");
     const { data, error } = await supabase
         .from('transactions')
         .delete()
-        .eq('id', transactionId);
+        .eq('id', transactionId)
+        .eq('user_id', user.id);
     if (error) throw error;
     return data;
 }
