@@ -7,11 +7,12 @@ import BottomNav from './components/SideNav';
 import HomePage from './pages/HomePage';
 import TransactionsPage from './pages/TransactionsPage';
 import ReportsPage from './pages/ReportsPage';
+import SettingsPage from './pages/SettingsPage';
 import Modal, { ModalProps } from './components/Modal';
 import Toast, { ToastProps } from './components/Toast';
 import TransactionDetailView from './components/reports/TransactionDetailView';
 
-export type Page = 'home' | 'transactions' | 'reports';
+export type Page = 'home' | 'transactions' | 'reports' | 'settings';
 
 // Placed here to avoid creating a new file, as per user constraints.
 interface EditTransactionFormProps {
@@ -323,6 +324,8 @@ const App: React.FC = () => {
                   categories={categories} 
                   onTransactionClick={handleViewTransaction}
                 />;
+      case 'settings':
+        return <SettingsPage transactions={transactions} />;
       default:
         return <HomePage 
                   stats={{ totalSales, totalExpenses, netProfit }} 
