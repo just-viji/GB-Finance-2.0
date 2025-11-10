@@ -27,7 +27,7 @@ const HomePage: React.FC<HomePageProps> = ({ stats, transactions, onTransactionC
 
       <div className="bg-white p-6 rounded-xl shadow-md">
         <h2 className="text-xl font-semibold mb-4 text-brand-dark">Financial Overview</h2>
-        <div className="h-72 md:h-80 mb-8">
+        <div className="h-72 md:h-80 mb-8 min-h-[300px]">
           <FinancialChart data={transactions} />
         </div>
         <TransactionList 

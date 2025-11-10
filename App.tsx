@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { loadData, saveTransactions, saveCategories } from './services/supabase';
+import { loadData, saveTransactions, saveCategories } from './services/localStorageService';
 import { Transaction, TransactionLineItem } from './types';
 import { INITIAL_CATEGORIES, PAYMENT_METHODS } from './constants';
 import { calculateTotalAmount } from './utils/transactionUtils';
@@ -11,6 +11,7 @@ import SettingsPage from './pages/SettingsPage';
 import Modal, { ModalProps } from './components/Modal';
 import Toast, { ToastProps } from './components/Toast';
 import TransactionDetailView from './components/reports/TransactionDetailView';
+import { checkSupabaseConnection } from './services/checkSupabase';
 
 export type Page = 'home' | 'transactions' | 'reports' | 'settings';
 
@@ -142,6 +143,7 @@ const App: React.FC = () => {
   
   // Load data from local storage on mount
   useEffect(() => {
+    checkSupabaseConnection();
     const { transactions: loadedTransactions, categories: loadedCategories, isNewUser } = loadData();
     setTransactions(loadedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
     setCategories(loadedCategories.sort());
