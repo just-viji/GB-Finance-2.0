@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { loadData, saveTransactions, saveCategories, clearAllData as clearAllDataFromDB, getSheetId, disconnectSheet } from './services/supabase';
+import { loadData, saveTransactions, saveCategories, clearAllData as clearAllDataFromDB, getAppScriptUrl, disconnectAppScript } from './services/supabase';
 import { Transaction, TransactionLineItem } from './types';
 // FIX: Import PAYMENT_METHODS to be used in the EditTransactionForm component.
 import { INITIAL_CATEGORIES, PAYMENT_METHODS } from './constants';
@@ -188,7 +188,7 @@ const NotConfiguredScreen: React.FC<{ onConfigure: () => void }> = ({ onConfigur
 );
 
 export default function App() {
-  const [isConfigured, setIsConfigured] = useState(!!getSheetId());
+  const [isConfigured, setIsConfigured] = useState(!!getAppScriptUrl());
   const [isLoading, setIsLoading] = useState(isConfigured);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -384,7 +384,7 @@ export default function App() {
   };
 
   const handleDisconnect = () => {
-    disconnectSheet();
+    disconnectAppScript();
     setIsConfigured(false);
     setTransactions([]);
     setCategories([]);
