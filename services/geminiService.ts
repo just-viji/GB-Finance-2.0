@@ -72,7 +72,10 @@ export async function scanBillWithGemini(base64ImageData: string): Promise<Scann
 
   } catch (error) {
     console.error('Error scanning bill with Gemini:', error);
-    throw new Error('Failed to analyze the bill image. The AI could not read the receipt.');
+    if (error instanceof Error) {
+        throw new Error(`AI scan failed. Reason: ${error.message}`);
+    }
+    throw new Error('Failed to analyze the bill image due to an unknown error.');
   }
 }
 
