@@ -1,10 +1,44 @@
 import { Transaction } from '../types';
 import { INITIAL_CATEGORIES } from '../constants';
 
-const TRANSACTIONS_KEY = 'gb-finance-transactions';
-const CATEGORIES_KEY = 'gb-finance-categories';
+const API_KEY = process.env.API_KEY;
+const SPREADSHEET_ID_KEY = 'google-sheet-id';
+const BASE_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
 
-// Seed initial data for new users
+const TRANSACTIONS_SHEET = 'Transactions';
+const CATEGORIES_SHEET = 'Categories';
+const TRANSACTION_HEADERS = ['id', 'type', 'description', 'date', 'category', 'paymentMethod', 'items_json'];
+const CATEGORY_HEADERS = ['name'];
+
+export const getSheetId = (): string | null => localStorage.getItem(SPREADSHEET_ID_KEY);
+
+export const disconnectSheet = (): void => localStorage.removeItem(SPREADSHEET_ID_KEY);
+
+const sheetRequest = async (url: string, options: RequestInit = {}): Promise<any> => {
+    if (!API_KEY) throw new Error("API Key is not configured in environment variables.");
+    const sheetId = getSheetId();
+    if (!sheetId && !url.includes(sheetId!)) throw new Error("Google Sheet ID is not set.");
+
+    try {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error?.message || `Request failed with status ${response.status}`);
+        }
+        return response.json();
+    } catch (e) {
+        if (e instanceof Error && e.message.includes('API key not valid')) {
+            throw new Error('The provided API Key is not valid. Please check your configuration.');
+        }
+        throw e;
+    }
+};
+
+export const getSheetProperties = async (sheetId: string) => {
+    const url = `${BASE_URL}/${sheetId}?key=${API_KEY}`;
+    return sheetRequest(url);
+};
+
 const seedInitialData = () => {
     const sampleTransactions: Omit<Transaction, 'id'>[] = [
         { type: 'sale', description: 'Room booking - Deluxe Suite', date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), category: 'Sale', paymentMethod: 'Online', items: [{id: '1a', description: 'Room Charge', quantity: 2, unitPrice: 8500}] },
@@ -19,42 +53,121 @@ const seedInitialData = () => {
         items: t.items.map((item, itemIndex) => ({...item, id: `${new Date().getTime()}-${index}-${itemIndex}`}))
     }));
 
-    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactionsWithIds));
-    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(INITIAL_CATEGORIES.sort()));
-
     return { transactions: transactionsWithIds, categories: INITIAL_CATEGORIES.sort() };
-}
+};
 
-export const loadData = (): { transactions: Transaction[], categories: string[], isNewUser: boolean } => {
-    const transactionsStr = localStorage.getItem(TRANSACTIONS_KEY);
-    const categoriesStr = localStorage.getItem(CATEGORIES_KEY);
+const arrayToTransactions = (values: string[][]): Transaction[] => {
+    return values.slice(1).map(row => {
+        try {
+            return {
+                id: row[0],
+                type: row[1] as 'sale' | 'expense',
+                description: row[2],
+                date: new Date(row[3]).toISOString(),
+                category: row[4],
+                paymentMethod: row[5] as 'Cash' | 'Online',
+                items: JSON.parse(row[6] || '[]'),
+            };
+        } catch (e) {
+            console.error("Failed to parse transaction row:", row, e);
+            return null;
+        }
+    }).filter((t): t is Transaction => t !== null);
+};
 
-    if (!transactionsStr || !categoriesStr) {
-        const { transactions, categories } = seedInitialData();
-        return { transactions, categories, isNewUser: true };
+const transactionsToArray = (transactions: Transaction[]): string[][] => {
+    return transactions.map(t => [
+        t.id,
+        t.type,
+        t.description,
+        t.date,
+        t.category,
+        t.paymentMethod,
+        JSON.stringify(t.items),
+    ]);
+};
+
+export const loadData = async (): Promise<{ transactions: Transaction[], categories: string[] }> => {
+    const sheetId = getSheetId();
+    const ranges = [`${TRANSACTIONS_SHEET}!A:G`, `${CATEGORIES_SHEET}!A:A`];
+    const url = `${BASE_URL}/${sheetId}/values:batchGet?ranges=${ranges.join('&ranges=')}&key=${API_KEY}`;
+    
+    const data = await sheetRequest(url);
+    const [transactionsResult, categoriesResult] = data.valueRanges;
+
+    let transactions: Transaction[] = [];
+    if (!transactionsResult.values || transactionsResult.values.length <= 1) {
+        const seeded = seedInitialData();
+        await saveTransactions(seeded.transactions);
+        transactions = seeded.transactions;
+    } else {
+        transactions = arrayToTransactions(transactionsResult.values);
     }
 
-    try {
-        const transactions: Transaction[] = JSON.parse(transactionsStr);
-        const categories: string[] = JSON.parse(categoriesStr);
-        return { transactions: transactions.map(t => ({...t, date: new Date(t.date).toISOString()})), categories, isNewUser: false };
-    } catch (e) {
-        console.error("Failed to parse data from localStorage", e);
-        // Clear corrupted data and re-seed
-        const { transactions, categories } = seedInitialData();
-        return { transactions, categories, isNewUser: true };
+    let categories: string[] = [];
+    if (!categoriesResult.values || categoriesResult.values.length <= 1) {
+        const seeded = seedInitialData();
+        await saveCategories(seeded.categories);
+        categories = seeded.categories;
+    } else {
+        categories = categoriesResult.values.slice(1).map((row: string[]) => row[0]).filter(Boolean);
     }
+    
+    return { transactions, categories };
 };
 
-export const saveTransactions = (transactions: Transaction[]) => {
-    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
+const writeToSheet = async (sheetName: string, headers: string[], data: any[][]) => {
+    const sheetId = getSheetId();
+    const clearRange = `${sheetName}!A2:Z`;
+    const clearUrl = `${BASE_URL}/${sheetId}/values/${clearRange}:clear?key=${API_KEY}`;
+    await sheetRequest(clearUrl, { method: 'POST', body: '{}' });
+
+    const values = [headers, ...data];
+    const writeUrl = `${BASE_URL}/${sheetId}/values/${sheetName}!A1?valueInputOption=USER_ENTERED&key=${API_KEY}`;
+    await sheetRequest(writeUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ values }),
+    });
 };
 
-export const saveCategories = (categories: string[]) => {
-    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
+export const saveTransactions = async (transactions: Transaction[]) => {
+    const data = transactionsToArray(transactions);
+    await writeToSheet(TRANSACTIONS_SHEET, TRANSACTION_HEADERS, data);
 };
 
-export const clearAllData = () => {
-    localStorage.removeItem(TRANSACTIONS_KEY);
-    localStorage.removeItem(CATEGORIES_KEY);
+export const saveCategories = async (categories: string[]) => {
+    const data = categories.map(c => [c]);
+    await writeToSheet(CATEGORIES_SHEET, CATEGORY_HEADERS, data);
+};
+
+export const clearAllData = async () => {
+    const sheetId = getSheetId();
+    const clearRequests = {
+        requests: [
+            {
+                updateCells: {
+                    range: { sheetId: 0 }, // Assumes first sheet is Transactions
+                    fields: "userEnteredValue"
+                }
+            },
+             {
+                updateCells: {
+                    range: { sheetId: 1 }, // Assumes second sheet is Categories
+                    fields: "userEnteredValue"
+                }
+            }
+        ]
+    };
+    // This is a more robust way to clear, but requires sheet IDs which is another API call.
+    // Let's stick to the simpler clear per range.
+    const url = `${BASE_URL}/${sheetId}/values:batchClear?key=${API_KEY}`;
+    const body = {
+      ranges: [`${TRANSACTIONS_SHEET}!A2:Z`, `${CATEGORIES_SHEET}!A2:Z`]
+    };
+    await sheetRequest(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
 };

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { loadData, saveTransactions, saveCategories, clearAllData as clearAllDataFromDB } from './services/supabase';
+import { loadData, saveTransactions, saveCategories, clearAllData as clearAllDataFromDB, getSheetId, disconnectSheet } from './services/supabase';
 import { Transaction, TransactionLineItem } from './types';
+// FIX: Import PAYMENT_METHODS to be used in the EditTransactionForm component.
 import { INITIAL_CATEGORIES, PAYMENT_METHODS } from './constants';
 import { calculateTotalAmount } from './utils/transactionUtils';
 import BottomNav from './components/SideNav';
@@ -160,7 +161,35 @@ const EditTransactionForm: React.FC<EditTransactionFormProps> = ({ transaction, 
     );
 };
 
+const FullScreenLoader: React.FC<{ message: string }> = ({ message }) => (
+    <div className="fixed inset-0 bg-gray-100/80 backdrop-blur-sm flex flex-col justify-center items-center z-50">
+        <svg className="animate-spin h-10 w-10 text-brand-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p className="mt-4 text-lg font-semibold text-brand-dark">{message}</p>
+    </div>
+);
+
+const NotConfiguredScreen: React.FC<{ onConfigure: () => void }> = ({ onConfigure }) => (
+    <div className="min-h-screen bg-gray-100 flex flex-col justify-center items-center text-center p-4">
+        <div className="bg-white p-8 rounded-xl shadow-md max-w-lg">
+            <h1 className="text-2xl font-bold text-brand-dark">Welcome to GB Finance 2.0</h1>
+            <p className="mt-4 text-brand-secondary">To get started, you need to connect the app to a Google Sheet which will be used as your database.</p>
+            <button
+                onClick={onConfigure}
+                className="mt-6 inline-flex items-center gap-2 px-6 py-3 bg-brand-primary text-white font-bold rounded-md hover:bg-brand-primary-hover transition-colors shadow-sm"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.96.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.287-.947zM10 13a3 3 0 100-6 3 3 0 000 6z" clipRule="evenodd" /></svg>
+                Go to Settings
+            </button>
+        </div>
+    </div>
+);
+
 export default function App() {
+  const [isConfigured, setIsConfigured] = useState(!!getSheetId());
+  const [isLoading, setIsLoading] = useState(isConfigured);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState<Page>('home');
@@ -169,13 +198,23 @@ export default function App() {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => {
-    const { transactions: loadedTransactions, categories: loadedCategories, isNewUser } = loadData();
-    setTransactions(loadedTransactions);
-    setCategories(loadedCategories);
-    if(isNewUser) {
-        showToast('Welcome! Sample data has been loaded to get you started.', 'success');
-    }
-  }, []);
+    const bootstrap = async () => {
+        if (isConfigured) {
+            setIsLoading(true);
+            try {
+                const { transactions: loadedTransactions, categories: loadedCategories } = await loadData();
+                setTransactions(loadedTransactions);
+                setCategories(loadedCategories);
+            } catch (e: any) {
+                showToast(`Error: ${e.message}`, 'error');
+                handleDisconnect();
+            } finally {
+                setIsLoading(false);
+            }
+        }
+    };
+    bootstrap();
+  }, [isConfigured]);
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToastProps({ message, type, isVisible: true });
@@ -204,7 +243,7 @@ export default function App() {
   const transactionDescriptions = useMemo(() => Array.from(new Set(transactions.map(t => t.description))), [transactions]);
   const itemDescriptions = useMemo(() => Array.from(new Set(transactions.flatMap(t => t.items.map(i => i.description)))), [transactions]);
 
-  const addTransaction = useCallback((newTransactionData: Omit<Transaction, 'id' | 'date'>) => {
+  const addTransaction = async (newTransactionData: Omit<Transaction, 'id' | 'date'>) => {
     const newTransaction: Transaction = {
       ...newTransactionData,
       id: new Date().getTime().toString(),
@@ -214,87 +253,141 @@ export default function App() {
         id: `${new Date().getTime()}-${index}`
       }))
     };
+    const previousTransactions = transactions;
     const updatedTransactions = [...transactions, newTransaction];
-    setTransactions(updatedTransactions);
-    saveTransactions(updatedTransactions);
-    showToast(`${newTransaction.type === 'sale' ? 'Sale' : 'Expense'} added successfully!`, 'success');
-  }, [transactions, showToast]);
+    setTransactions(updatedTransactions); // Optimistic update
 
-  const updateTransaction = (updatedTransaction: Transaction) => {
-     const updatedTransactions = transactions.map(t => t.id === updatedTransaction.id ? updatedTransaction : t);
-     setTransactions(updatedTransactions);
-     saveTransactions(updatedTransactions);
-     setSelectedTransaction(null); // Close modal
-     setModalProps({isOpen: false, title: '', children: null}); // also close the edit modal
-     showToast('Transaction updated successfully!', 'success');
+    try {
+      await saveTransactions(updatedTransactions);
+      showToast(`${newTransaction.type === 'sale' ? 'Sale' : 'Expense'} added successfully!`, 'success');
+    } catch(e) {
+      console.error(e);
+      setTransactions(previousTransactions); // Revert
+      showToast(`Failed to save transaction: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+    }
+  };
+
+  const updateTransaction = async (updatedTransaction: Transaction) => {
+    const previousTransactions = transactions;
+    const updatedTransactions = transactions.map(t => t.id === updatedTransaction.id ? updatedTransaction : t);
+    setTransactions(updatedTransactions);
+    setSelectedTransaction(null);
+    setModalProps({isOpen: false, title: '', children: null});
+
+    try {
+      await saveTransactions(updatedTransactions);
+      showToast('Transaction updated successfully!', 'success');
+    } catch(e) {
+      console.error(e);
+      setTransactions(previousTransactions);
+      showToast(`Failed to update transaction: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+    }
   }
 
   const handleDeleteRequest = () => {
     if (!selectedTransaction) return;
-    
-    // Capture the transaction before closing the detail modal
     const transactionToDelete = selectedTransaction;
-    // Close the detail modal
     setSelectedTransaction(null);
     
      setModalProps({
         isOpen: true,
         title: 'Confirm Deletion',
         children: `Are you sure you want to delete the transaction: "${transactionToDelete.description}"? This action cannot be undone.`,
-        onConfirm: () => {
-            handleDeleteConfirm(transactionToDelete.id)
+        onConfirm: async () => {
             setModalProps({isOpen: false, title: '', children: null});
+            await handleDeleteConfirm(transactionToDelete.id)
         },
         confirmText: 'Delete',
         confirmVariant: 'danger'
     });
   }
 
-  const handleDeleteConfirm = (id: string) => {
+  const handleDeleteConfirm = async (id: string) => {
+    const previousTransactions = transactions;
     const updatedTransactions = transactions.filter(t => t.id !== id);
     setTransactions(updatedTransactions);
-    saveTransactions(updatedTransactions);
-    showToast('Transaction deleted.', 'success');
+
+    try {
+        await saveTransactions(updatedTransactions);
+        showToast('Transaction deleted.', 'success');
+    } catch (e) {
+        console.error(e);
+        setTransactions(previousTransactions);
+        showToast(`Failed to delete transaction: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+    }
   }
   
-  const addCategory = useCallback((newCategory: string) => {
+  const addCategory = async (newCategory: string) => {
     if (categories.some(c => c.toLowerCase() === newCategory.toLowerCase())) {
         showToast('Category already exists.', 'error');
         return;
     }
+    const previousCategories = categories;
     const updatedCategories = [...categories, newCategory].sort();
     setCategories(updatedCategories);
-    saveCategories(updatedCategories);
-    showToast('Category added.', 'success');
-  }, [categories, showToast]);
+    
+    try {
+        await saveCategories(updatedCategories);
+        showToast('Category added.', 'success');
+    } catch (e) {
+        console.error(e);
+        setCategories(previousCategories);
+        showToast(`Failed to add category: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+    }
+  };
 
-  const deleteCategory = useCallback((categoryToDelete: string) => {
+  const deleteCategory = async (categoryToDelete: string) => {
     if(transactions.some(t => t.category === categoryToDelete)) {
         showToast('Cannot delete category as it is used in some transactions.', 'error');
         return;
     }
+    const previousCategories = categories;
     const updatedCategories = categories.filter(c => c !== categoryToDelete);
     setCategories(updatedCategories);
-    saveCategories(updatedCategories);
-    showToast('Category deleted.', 'success');
-  }, [categories, transactions, showToast]);
+    
+    try {
+        await saveCategories(updatedCategories);
+        showToast('Category deleted.', 'success');
+    } catch (e) {
+        console.error(e);
+        setCategories(previousCategories);
+        showToast(`Failed to delete category: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+    }
+  };
   
   const handleClearAllData = () => {
     setModalProps({
         isOpen: true,
         title: 'Clear All Data',
-        children: 'Are you sure you want to delete all transactions and categories? This is irreversible.',
-        onConfirm: () => {
-            clearAllDataFromDB();
-            setTransactions([]);
-            setCategories(INITIAL_CATEGORIES); // Reset to initial
-            showToast('All data has been cleared.', 'success');
-            setModalProps({isOpen: false, title: '', children: null});
-            setCurrentPage('home');
+        children: 'Are you sure you want to delete all transactions and categories from your Google Sheet? This is irreversible.',
+        onConfirm: async () => {
+            try {
+                await clearAllDataFromDB();
+                setTransactions([]);
+                setCategories(INITIAL_CATEGORIES); // Reset to initial
+                showToast('All data has been cleared.', 'success');
+            } catch (e) {
+                showToast(`Failed to clear data: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+            } finally {
+                setModalProps({isOpen: false, title: '', children: null});
+                setCurrentPage('home');
+            }
         },
         confirmText: 'Clear Data',
         confirmVariant: 'danger'
     });
+  };
+
+  const handleConnect = () => {
+    setIsConfigured(true);
+    setCurrentPage('home');
+  };
+
+  const handleDisconnect = () => {
+    disconnectSheet();
+    setIsConfigured(false);
+    setTransactions([]);
+    setCategories([]);
   };
 
   const closeModal = () => {
@@ -327,11 +420,21 @@ export default function App() {
             onAddCategory={addCategory}
             onDeleteCategory={deleteCategory}
             onClearAllData={handleClearAllData}
+            onConnect={handleConnect}
+            onDisconnect={handleDisconnect}
         />;
       default:
         return <HomePage stats={stats} transactions={sortedTransactions} onTransactionClick={handleTransactionSelect} />;
     }
   };
+
+  if (isLoading) {
+    return <FullScreenLoader message="Loading data from Google Sheet..." />
+  }
+
+  if (!isConfigured) {
+    return <NotConfiguredScreen onConfigure={() => setCurrentPage('settings')} />
+  }
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -342,7 +445,6 @@ export default function App() {
       <Modal {...modalProps} onClose={closeModal} />
       <Toast {...toastProps} onClose={() => setToastProps(prev => ({ ...prev, isVisible: false }))} />
 
-      {/* Detail/Edit View Modal */}
       <Modal isOpen={!!selectedTransaction} onClose={() => setSelectedTransaction(null)} title="Transaction Details" hideFooter>
         {selectedTransaction && (
             <TransactionDetailView 
@@ -359,7 +461,7 @@ export default function App() {
                         />,
                         hideFooter: true
                    });
-                   setSelectedTransaction(null); // Close the detail view behind
+                   setSelectedTransaction(null);
                 }}
                 onDelete={handleDeleteRequest}
             />

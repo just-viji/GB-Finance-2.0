@@ -7,25 +7,34 @@ interface SettingsPageProps {
   onAddCategory: (category: string) => void;
   onDeleteCategory: (category: string) => void;
   onClearAllData: () => void;
+  onConnect: () => void;
+  onDisconnect: () => void;
 }
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ categories, onAddCategory, onDeleteCategory, onClearAllData }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ 
+  categories, 
+  onAddCategory, 
+  onDeleteCategory, 
+  onClearAllData,
+  onConnect,
+  onDisconnect
+}) => {
   return (
     <div className="space-y-8">
       <h2 className="text-2xl font-bold text-brand-dark">Settings</h2>
+
+      <GoogleSheetSync onConnect={onConnect} onDisconnect={onDisconnect} />
 
       <CategoryManager
         categories={categories}
         onAddCategory={onAddCategory}
         onDeleteCategory={onDeleteCategory}
       />
-      
-      <GoogleSheetSync />
 
       <div className="bg-white p-6 rounded-xl shadow-md border border-red-200">
         <h3 className="text-xl font-semibold text-red-600">Danger Zone</h3>
         <p className="text-brand-secondary mt-2 mb-4">
-          Clearing all data will permanently delete all your transactions and custom categories. The app will be reset to its initial state. This action cannot be undone.
+          Clearing all data will permanently delete all your transactions and custom categories from the Google Sheet. The app will be reset to its initial state. This action cannot be undone.
         </p>
         <button
           onClick={onClearAllData}
