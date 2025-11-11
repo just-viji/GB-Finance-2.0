@@ -7,7 +7,7 @@ interface GoogleSheetSyncProps {
 }
 
 const GoogleSheetSync: React.FC<GoogleSheetSyncProps> = ({ onConnect, onDisconnect }) => {
-  const [sheetId, setSheetId] = useState('');
+  const [sheetIdInput, setSheetIdInput] = useState('');
   const [connectedSheetTitle, setConnectedSheetTitle] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -31,19 +31,27 @@ const GoogleSheetSync: React.FC<GoogleSheetSyncProps> = ({ onConnect, onDisconne
   }, [onDisconnect]);
 
   const handleConnect = async () => {
-    if (!sheetId) {
-      setError('Please enter a Google Sheet ID.');
+    const inputValue = sheetIdInput.trim();
+    if (!inputValue) {
+      setError('Please enter a Google Sheet ID or URL.');
       return;
     }
+    
+    let extractedId = inputValue;
+    const match = inputValue.match(/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (match && match[1]) {
+      extractedId = match[1];
+    }
+
     setIsLoading(true);
     setError(null);
     try {
-      const properties = await getSheetProperties(sheetId);
-      localStorage.setItem('google-sheet-id', sheetId);
+      const properties = await getSheetProperties(extractedId);
+      localStorage.setItem('google-sheet-id', extractedId);
       setConnectedSheetTitle(properties.properties.title);
       onConnect();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to connect. Check Sheet ID and permissions.');
+      setError(e instanceof Error ? e.message : 'Failed to connect. Check Sheet ID/URL and permissions.');
     } finally {
       setIsLoading(false);
     }
@@ -52,7 +60,7 @@ const GoogleSheetSync: React.FC<GoogleSheetSyncProps> = ({ onConnect, onDisconne
   const handleDisconnect = () => {
     onDisconnect();
     setConnectedSheetTitle(null);
-    setSheetId('');
+    setSheetIdInput('');
     setError(null);
   };
 
@@ -74,49 +82,69 @@ const GoogleSheetSync: React.FC<GoogleSheetSyncProps> = ({ onConnect, onDisconne
           <div className="bg-green-50 border border-green-200 text-green-800 p-3 rounded-lg text-sm">
             <p className="font-semibold flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" /></svg>
-              Connected to: <span className="font-bold underline">{connectedSheetTitle}</span>
+              Connected to: <span className="font-bold">{connectedSheetTitle}</span>
             </p>
           </div>
           <button
-              onClick={handleDisconnect}
-              className="w-full px-4 py-2 text-sm rounded-md font-semibold bg-gray-200 text-brand-dark hover:bg-gray-300"
-            >
-              Disconnect
+            onClick={handleDisconnect}
+            className="w-full px-4 py-2 text-sm rounded-md font-semibold bg-red-100 text-red-700 hover:bg-red-200"
+          >
+            Disconnect
           </button>
-          {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
       ) : (
         <div className="space-y-4">
-            <p className="text-brand-secondary text-sm">
-                This app uses a Google Sheet as its database. Please follow these steps to connect:
-            </p>
-            <ol className="list-decimal list-inside text-sm text-brand-secondary space-y-1 bg-gray-50 p-3 rounded-md">
-                <li>Create a new, blank Google Sheet in your Google account.</li>
-                <li>Click the "Share" button (top right).</li>
-                <li>Under "General access", change "Restricted" to <span className="font-semibold">"Anyone with the link"</span>.</li>
-                <li>Change the role from "Viewer" to <span className="font-semibold">"Editor"</span>. This is required to save data.</li>
-                <li>Copy the Sheet ID from the URL (e.g., the long string in `.../d/SHEET_ID/edit`).</li>
-                <li>Paste the ID below and click Connect.</li>
-            </ol>
-            {error && <p className="text-red-600 text-sm bg-red-50 p-2 rounded-md">{error}</p>}
-            <div className="flex gap-2 items-center">
-                <input
-                    type="text"
-                    value={sheetId}
-                    onChange={(e) => { setSheetId(e.target.value); setError(null); }}
-                    placeholder="Paste your Google Sheet ID here"
-                    className="flex-grow w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary"
-                    disabled={isLoading}
-                    aria-label="Google Sheet ID"
-                />
-                <button
-                    onClick={handleConnect}
-                    disabled={isLoading}
-                    className="px-4 py-2 rounded-md font-semibold bg-brand-primary text-white hover:bg-brand-primary-hover disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                >
-                    Connect
-                </button>
+          <p className="text-sm text-brand-secondary">
+            This app uses a Google Sheet as its database. Please follow these steps to connect:
+          </p>
+          <div className="text-sm text-brand-secondary space-y-3">
+            <div>
+                <p className="font-semibold">Part A: Configure Google Cloud Project</p>
+                <ol className="list-decimal list-inside pl-2 space-y-1">
+                    <li>Go to your Google Cloud Console and create or select a project.</li>
+                    <li>Enable the <strong>Google Sheets API</strong> for your project.</li>
+                    <li>Create an API Key. <strong>Important:</strong> For security, you must restrict the key.
+                        <ul className="list-disc list-inside pl-4">
+                            <li>Under API restrictions, select "Google Sheets API".</li>
+                            <li>Under Application restrictions, select "HTTP referrers" and add your web app's domain.</li>
+                        </ul>
+                    </li>
+                </ol>
             </div>
+            <div>
+                <p className="font-semibold">Part B: Configure Google Sheet</p>
+                <ol className="list-decimal list-inside pl-2 space-y-1" start={4}>
+                    <li>Create a new, blank Google Sheet in your Google account.</li>
+                    <li>Click the "Share" button (top right).</li>
+                    <li>Under "General access", change "Restricted" to "<strong>Anyone with the link</strong>".</li>
+                    <li>Change the role from "Viewer" to "<strong>Editor</strong>". This is required to save data.</li>
+                </ol>
+            </div>
+             <div>
+                <p className="font-semibold">Part C: Connect App</p>
+                <ol className="list-decimal list-inside pl-2" start={8}>
+                    <li>Paste the ID or the full sheet URL below and click Connect.</li>
+                </ol>
+            </div>
+          </div>
+          {error && <div className="bg-red-100 border border-red-200 text-red-800 p-3 rounded-lg text-sm font-semibold">{error}</div>}
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={sheetIdInput}
+              onChange={(e) => setSheetIdInput(e.target.value)}
+              placeholder="Google Sheet ID or URL"
+              className="flex-grow w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary"
+              aria-label="Google Sheet ID or URL"
+            />
+            <button
+              onClick={handleConnect}
+              disabled={isLoading}
+              className="px-4 py-2 bg-brand-primary text-white rounded-md font-semibold hover:bg-brand-primary-hover disabled:bg-gray-400"
+            >
+              Connect
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -14,29 +14,50 @@ export const getSheetId = (): string | null => localStorage.getItem(SPREADSHEET_
 
 export const disconnectSheet = (): void => localStorage.removeItem(SPREADSHEET_ID_KEY);
 
-const sheetRequest = async (url: string, options: RequestInit = {}): Promise<any> => {
+const sheetRequest = async (url: string, options: RequestInit = {}, bypassIdCheck = false): Promise<any> => {
     if (!API_KEY) throw new Error("API Key is not configured in environment variables.");
-    const sheetId = getSheetId();
-    if (!sheetId && !url.includes(sheetId!)) throw new Error("Google Sheet ID is not set.");
+    
+    if (!bypassIdCheck) {
+        const sheetId = getSheetId();
+        if (!sheetId) {
+            throw new Error("Google Sheet ID is not set.");
+        }
+    }
 
     try {
         const response = await fetch(url, options);
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error?.message || `Request failed with status ${response.status}`);
+            const errorMessage = errorData.error?.message || `Request failed with status ${response.status}`;
+
+            if (errorMessage.includes('API key not valid')) {
+                throw new Error('The provided API Key is not valid. Please check your configuration in the Google Cloud Console, and ensure any referrer restrictions are correctly set up for this web app\'s domain.');
+            }
+            if (errorMessage.includes('API has not been used') || errorMessage.includes('is disabled')) {
+                throw new Error('The Google Sheets API has not been enabled for your project. Please enable it in your Google Cloud Console and wait a few minutes before trying again.');
+            }
+            if (errorMessage.includes('caller does not have permission')) {
+                throw new Error('Permission denied. Please make sure the sheet is shared with "Anyone with the link" as an "Editor".');
+            }
+            if (errorMessage.includes('Not Found')) {
+                throw new Error('Google Sheet not found. Please check if the ID or URL is correct.');
+            }
+            throw new Error(errorMessage);
         }
         return response.json();
     } catch (e) {
-        if (e instanceof Error && e.message.includes('API key not valid')) {
-            throw new Error('The provided API Key is not valid. Please check your configuration.');
+        // Re-throw custom errors or provide a generic network error.
+        if (e instanceof Error) {
+            throw e;
         }
-        throw e;
+        throw new Error('A network error occurred. Please check your connection.');
     }
 };
 
 export const getSheetProperties = async (sheetId: string) => {
     const url = `${BASE_URL}/${sheetId}?key=${API_KEY}`;
-    return sheetRequest(url);
+    // The third argument `true` bypasses the localStorage sheet ID check, as this is used for the initial connection.
+    return sheetRequest(url, {}, true);
 };
 
 const seedInitialData = () => {
