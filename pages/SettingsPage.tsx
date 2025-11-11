@@ -1,6 +1,7 @@
 import React from 'react';
 import CategoryManager from '../components/CategoryManager';
 import GoogleSheetSync from '../components/GoogleSheetSync';
+import ApiKeyManager from '../components/ApiKeyManager';
 
 interface SettingsPageProps {
   categories: string[];
@@ -9,6 +10,7 @@ interface SettingsPageProps {
   onClearAllData: () => void;
   onConnect: () => void;
   onDisconnect: () => void;
+  onLogout: () => void;
 }
 
 const SettingsPage: React.FC<SettingsPageProps> = ({ 
@@ -17,19 +19,35 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
   onDeleteCategory, 
   onClearAllData,
   onConnect,
-  onDisconnect
+  onDisconnect,
+  onLogout
 }) => {
   return (
     <div className="space-y-8">
       <h2 className="text-2xl font-bold text-brand-dark">Settings</h2>
 
       <GoogleSheetSync onConnect={onConnect} onDisconnect={onDisconnect} />
+      
+      <ApiKeyManager />
 
       <CategoryManager
         categories={categories}
         onAddCategory={onAddCategory}
         onDeleteCategory={onDeleteCategory}
       />
+      
+      <div className="bg-white p-6 rounded-xl shadow-md">
+        <h3 className="text-xl font-semibold text-brand-dark">Account</h3>
+         <p className="text-brand-secondary mt-2 mb-4">
+          You are currently logged in as <span className="font-semibold text-brand-dark">admin</span>.
+        </p>
+        <button
+          onClick={onLogout}
+          className="px-4 py-2 text-sm rounded-md font-semibold bg-brand-secondary/10 text-brand-secondary hover:bg-brand-secondary/20 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary"
+        >
+          Logout
+        </button>
+      </div>
 
       <div className="bg-white p-6 rounded-xl shadow-md border border-red-200">
         <h3 className="text-xl font-semibold text-red-600">Danger Zone</h3>

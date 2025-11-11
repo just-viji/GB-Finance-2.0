@@ -12,6 +12,7 @@ import SettingsPage from './pages/SettingsPage';
 import Modal, { ModalProps } from './components/Modal';
 import Toast, { ToastProps } from './components/Toast';
 import TransactionDetailView from './components/reports/TransactionDetailView';
+import LoginPage from './pages/LoginPage';
 
 export type Page = 'home' | 'transactions' | 'reports' | 'settings';
 
@@ -188,6 +189,7 @@ const NotConfiguredScreen: React.FC<{ onConfigure: () => void }> = ({ onConfigur
 );
 
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(() => !!sessionStorage.getItem('isLoggedIn'));
   const [isConfigured, setIsConfigured] = useState(!!getAppScriptUrl());
   const [isLoading, setIsLoading] = useState(isConfigured);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -199,7 +201,7 @@ export default function App() {
 
   useEffect(() => {
     const bootstrap = async () => {
-        if (isConfigured) {
+        if (isConfigured && isLoggedIn) {
             setIsLoading(true);
             try {
                 const { transactions: loadedTransactions, categories: loadedCategories } = await loadData();
@@ -211,10 +213,12 @@ export default function App() {
             } finally {
                 setIsLoading(false);
             }
+        } else {
+            setIsLoading(false);
         }
     };
     bootstrap();
-  }, [isConfigured]);
+  }, [isConfigured, isLoggedIn]);
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToastProps({ message, type, isVisible: true });
@@ -222,6 +226,17 @@ export default function App() {
       setToastProps(prev => ({ ...prev, isVisible: false }));
     }, 3000);
   }, []);
+  
+  const handleLoginSuccess = () => {
+    sessionStorage.setItem('isLoggedIn', 'true');
+    setIsLoggedIn(true);
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('isLoggedIn');
+    setIsLoggedIn(false);
+    setCurrentPage('home'); // Reset to home page on logout
+  };
 
   const sortedTransactions = useMemo(() => {
     return [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -422,11 +437,16 @@ export default function App() {
             onClearAllData={handleClearAllData}
             onConnect={handleConnect}
             onDisconnect={handleDisconnect}
+            onLogout={handleLogout}
         />;
       default:
         return <HomePage stats={stats} transactions={sortedTransactions} onTransactionClick={handleTransactionSelect} />;
     }
   };
+
+  if (!isLoggedIn) {
+    return <LoginPage onLoginSuccess={handleLoginSuccess} />;
+  }
 
   if (isLoading) {
     return <FullScreenLoader message="Loading data from Google Sheet..." />
@@ -444,6 +464,7 @@ export default function App() {
               onClearAllData={handleClearAllData}
               onConnect={handleConnect}
               onDisconnect={handleDisconnect}
+              onLogout={handleLogout}
             />
           </main>
         </div>

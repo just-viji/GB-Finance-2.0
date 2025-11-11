@@ -1,11 +1,17 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { TransactionLineItem } from '../types';
+import { getGeminiApiKey } from './apiKeyService';
 
 export type ScannedItem = Omit<TransactionLineItem, 'id'>;
 
 export async function scanBillWithGemini(base64ImageData: string): Promise<ScannedItem[]> {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error("Gemini API key not configured. Please add it in the Settings page.");
+  }
+
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const ai = new GoogleGenAI({ apiKey });
 
     const imagePart = {
       inlineData: {
@@ -73,6 +79,9 @@ export async function scanBillWithGemini(base64ImageData: string): Promise<Scann
   } catch (error) {
     console.error('Error scanning bill with Gemini:', error);
     if (error instanceof Error) {
+        if (error.message.includes('API key not valid')) {
+            throw new Error('The provided Gemini API Key is not valid. Please check your configuration.');
+        }
         throw new Error(`AI scan failed. Reason: ${error.message}`);
     }
     throw new Error('Failed to analyze the bill image due to an unknown error.');
