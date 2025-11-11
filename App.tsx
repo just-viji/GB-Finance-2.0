@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { loadData, saveTransactions, saveCategories, clearAllData as clearAllDataFromDB } from './services/supabase';
+import { loadData, saveTransactions, saveCategories, clearAllData as clearAllDataFromDB, saveSyncUrl as saveSyncUrlToDB, loadSyncUrl } from './services/supabase';
 import { Transaction, TransactionLineItem } from './types';
 import { INITIAL_CATEGORIES, PAYMENT_METHODS } from './constants';
 import { calculateTotalAmount } from './utils/transactionUtils';
@@ -168,14 +168,10 @@ export default function App() {
   const [toastProps, setToastProps] = useState<Omit<ToastProps, 'onClose'>>({ isVisible: false, message: '' });
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
-  useEffect(() => {
-    const { transactions: loadedTransactions, categories: loadedCategories, isNewUser } = loadData();
-    setTransactions(loadedTransactions);
-    setCategories(loadedCategories);
-    if(isNewUser) {
-        showToast('Welcome! Sample data has been loaded to get you started.', 'success');
-    }
-  }, []);
+  const [syncUrl, setSyncUrl] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState('idle');
+  const [lastSyncTimestamp, setLastSyncTimestamp] = useState<string | null>(null);
+
 
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToastProps({ message, type, isVisible: true });
@@ -183,6 +179,79 @@ export default function App() {
       setToastProps(prev => ({ ...prev, isVisible: false }));
     }, 3000);
   }, []);
+
+  const triggerSync = useCallback(async (
+    currentTransactions: Transaction[],
+    currentCategories: string[],
+    urlOverride?: string | null
+  ) => {
+    const url = urlOverride || syncUrl;
+    if (!url) return false;
+
+    setSyncStatus('syncing');
+    try {
+      await fetch(url, {
+        method: 'POST',
+        body: JSON.stringify({ transactions: currentTransactions, categories: currentCategories }),
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        mode: 'cors',
+      });
+      // Assuming success if the fetch doesn't throw, as Apps Script POST responses can be tricky
+      setSyncStatus('success');
+      setLastSyncTimestamp(new Date().toISOString());
+      return true;
+    } catch (error) {
+      console.error('Sync failed:', error);
+      setSyncStatus(`error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      showToast('Failed to sync data to Google Sheets.', 'error');
+      return false;
+    }
+  }, [syncUrl, showToast]);
+  
+  useEffect(() => {
+    const url = loadSyncUrl();
+    setSyncUrl(url);
+
+    const loadInitialData = async () => {
+        if (url) {
+            setSyncStatus('syncing');
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error(`Network response was not ok: ${response.statusText}`);
+                const data = await response.json();
+                if (data.error) throw new Error(data.error);
+                
+                const loadedTransactions = (data.transactions || []).map((t: any) => ({...t, date: new Date(t.date).toISOString()}));
+                const loadedCategories = data.categories || [];
+
+                setTransactions(loadedTransactions);
+                setCategories(loadedCategories);
+                saveTransactions(loadedTransactions);
+                saveCategories(loadedCategories);
+                setSyncStatus('success');
+                setLastSyncTimestamp(new Date().toISOString());
+                showToast('Data loaded from Google Sheets.', 'success');
+            } catch (e) {
+                setSyncStatus(`error: ${e instanceof Error ? e.message : 'Failed to fetch'}`);
+                showToast('Failed to load from Google Sheets. Using local data.', 'error');
+                const { transactions, categories, isNewUser } = loadData();
+                setTransactions(transactions);
+                setCategories(categories);
+                if (isNewUser) {
+                    showToast('Welcome! Sample data has been loaded to get you started.', 'success');
+                }
+            }
+        } else {
+            const { transactions: loadedTransactions, categories: loadedCategories, isNewUser } = loadData();
+            setTransactions(loadedTransactions);
+            setCategories(loadedCategories);
+            if(isNewUser) {
+                showToast('Welcome! Sample data has been loaded to get you started.', 'success');
+            }
+        }
+    };
+    loadInitialData();
+  }, [showToast]);
 
   const sortedTransactions = useMemo(() => {
     return [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -217,24 +286,26 @@ export default function App() {
     const updatedTransactions = [...transactions, newTransaction];
     setTransactions(updatedTransactions);
     saveTransactions(updatedTransactions);
-    showToast(`${newTransaction.type === 'sale' ? 'Sale' : 'Expense'} added successfully!`, 'success');
-  }, [transactions, showToast]);
+    triggerSync(updatedTransactions, categories).then(() => {
+        showToast(`${newTransaction.type === 'sale' ? 'Sale' : 'Expense'} added successfully!`, 'success');
+    });
+  }, [transactions, categories, showToast, triggerSync]);
 
   const updateTransaction = (updatedTransaction: Transaction) => {
      const updatedTransactions = transactions.map(t => t.id === updatedTransaction.id ? updatedTransaction : t);
      setTransactions(updatedTransactions);
      saveTransactions(updatedTransactions);
-     setSelectedTransaction(null); // Close modal
-     setModalProps({isOpen: false, title: '', children: null}); // also close the edit modal
-     showToast('Transaction updated successfully!', 'success');
+     setSelectedTransaction(null);
+     setModalProps({isOpen: false, title: '', children: null});
+     triggerSync(updatedTransactions, categories).then(() => {
+        showToast('Transaction updated successfully!', 'success');
+     });
   }
 
   const handleDeleteRequest = () => {
     if (!selectedTransaction) return;
     
-    // Capture the transaction before closing the detail modal
     const transactionToDelete = selectedTransaction;
-    // Close the detail modal
     setSelectedTransaction(null);
     
      setModalProps({
@@ -254,7 +325,9 @@ export default function App() {
     const updatedTransactions = transactions.filter(t => t.id !== id);
     setTransactions(updatedTransactions);
     saveTransactions(updatedTransactions);
-    showToast('Transaction deleted.', 'success');
+    triggerSync(updatedTransactions, categories).then(() => {
+      showToast('Transaction deleted.', 'success');
+    });
   }
   
   const addCategory = useCallback((newCategory: string) => {
@@ -265,8 +338,10 @@ export default function App() {
     const updatedCategories = [...categories, newCategory].sort();
     setCategories(updatedCategories);
     saveCategories(updatedCategories);
-    showToast('Category added.', 'success');
-  }, [categories, showToast]);
+    triggerSync(transactions, updatedCategories).then(() => {
+      showToast('Category added.', 'success');
+    });
+  }, [categories, transactions, showToast, triggerSync]);
 
   const deleteCategory = useCallback((categoryToDelete: string) => {
     if(transactions.some(t => t.category === categoryToDelete)) {
@@ -276,26 +351,60 @@ export default function App() {
     const updatedCategories = categories.filter(c => c !== categoryToDelete);
     setCategories(updatedCategories);
     saveCategories(updatedCategories);
-    showToast('Category deleted.', 'success');
-  }, [categories, transactions, showToast]);
+    triggerSync(transactions, updatedCategories).then(() => {
+      showToast('Category deleted.', 'success');
+    });
+  }, [categories, transactions, showToast, triggerSync]);
   
   const handleClearAllData = () => {
     setModalProps({
         isOpen: true,
-        title: 'Clear All Data',
-        children: 'Are you sure you want to delete all transactions and categories? This is irreversible.',
-        onConfirm: () => {
-            clearAllDataFromDB();
-            setTransactions([]);
-            setCategories(INITIAL_CATEGORIES); // Reset to initial
-            showToast('All data has been cleared.', 'success');
+        title: 'Clear All Data & Unlink Sheet',
+        children: 'This will delete all local data, clear the linked Google Sheet (if configured), and remove the sync URL. This is irreversible.',
+        onConfirm: async () => {
+            const urlToClear = syncUrl;
+            const emptyTransactions: Transaction[] = [];
+            const initialCategories = INITIAL_CATEGORIES;
+            
             setModalProps({isOpen: false, title: '', children: null});
+
+            if (urlToClear) {
+                const postSuccess = await triggerSync(emptyTransactions, initialCategories, urlToClear);
+                if (!postSuccess) {
+                  showToast('Could not clear Google Sheet. Please check permissions or clear it manually. Local data not deleted.', 'error');
+                  return;
+                }
+            }
+            
+            clearAllDataFromDB();
+            setTransactions(emptyTransactions);
+            setCategories(initialCategories);
+            setSyncUrl(null);
+            setSyncStatus('idle');
+            setLastSyncTimestamp(null);
+            showToast('All app data has been cleared.', 'success');
             setCurrentPage('home');
         },
         confirmText: 'Clear Data',
         confirmVariant: 'danger'
     });
   };
+
+  const handleSaveSyncUrl = (url: string) => {
+    saveSyncUrlToDB(url);
+    setSyncUrl(url);
+    showToast('Sync URL saved. Reload the app to fetch data from your sheet.', 'success');
+  }
+
+  const handleSyncNow = async () => {
+    showToast('Manual sync started...', 'success');
+    const success = await triggerSync(transactions, categories);
+    if(success) {
+      showToast('Sync to Google Sheets successful!', 'success');
+    }
+    // Error toast is handled inside triggerSync
+    return success;
+  }
 
   const closeModal = () => {
     setModalProps({ isOpen: false, title: '', children: null });
@@ -327,6 +436,11 @@ export default function App() {
             onAddCategory={addCategory}
             onDeleteCategory={deleteCategory}
             onClearAllData={handleClearAllData}
+            syncUrl={syncUrl || ''}
+            onSaveSyncUrl={handleSaveSyncUrl}
+            onSyncNow={handleSyncNow}
+            syncStatus={syncStatus}
+            lastSyncTimestamp={lastSyncTimestamp}
         />;
       default:
         return <HomePage stats={stats} transactions={sortedTransactions} onTransactionClick={handleTransactionSelect} />;

@@ -3,6 +3,8 @@ import { INITIAL_CATEGORIES } from '../constants';
 
 const TRANSACTIONS_KEY = 'gb-finance-transactions';
 const CATEGORIES_KEY = 'gb-finance-categories';
+const SYNC_URL_KEY = 'gb-finance-sync-url';
+
 
 // Seed initial data for new users
 const seedInitialData = () => {
@@ -57,4 +59,13 @@ export const saveCategories = (categories: string[]) => {
 export const clearAllData = () => {
     localStorage.removeItem(TRANSACTIONS_KEY);
     localStorage.removeItem(CATEGORIES_KEY);
+    localStorage.removeItem(SYNC_URL_KEY);
+};
+
+export const saveSyncUrl = (url: string) => {
+    localStorage.setItem(SYNC_URL_KEY, url);
+};
+
+export const loadSyncUrl = (): string | null => {
+    return localStorage.getItem(SYNC_URL_KEY);
 };
