@@ -1,30 +1,35 @@
 import React from 'react';
-import GoogleSheetSync from '../components/GoogleSheetSync';
-import { Transaction } from '../types';
+import CategoryManager from '../components/CategoryManager';
 
 interface SettingsPageProps {
-  transactions: Transaction[];
-  onLogout: () => void;
+  categories: string[];
+  onAddCategory: (category: string) => void;
+  onDeleteCategory: (category: string) => void;
+  onClearAllData: () => void;
 }
 
-const SettingsPage: React.FC<SettingsPageProps> = ({ transactions, onLogout }) => {
+const SettingsPage: React.FC<SettingsPageProps> = ({ categories, onAddCategory, onDeleteCategory, onClearAllData }) => {
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold text-brand-dark">Settings</h1>
-      
-      <div className="bg-white p-6 rounded-xl shadow-md">
-        <h2 className="text-xl font-semibold text-brand-dark mb-4">Actions</h2>
-        <button 
-          onClick={onLogout}
-          className="w-full max-w-xs bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-opacity-50 transition-colors"
-        >
-          Logout
-        </button>
-      </div>
+      <h2 className="text-2xl font-bold text-brand-dark">Settings</h2>
 
-      <div className="bg-white p-6 rounded-xl shadow-md">
-        <h2 className="text-xl font-semibold text-brand-dark mb-4">Data Sync</h2>
-        <GoogleSheetSync transactions={transactions} />
+      <CategoryManager
+        categories={categories}
+        onAddCategory={onAddCategory}
+        onDeleteCategory={onDeleteCategory}
+      />
+      
+      <div className="bg-white p-6 rounded-xl shadow-md border border-red-200">
+        <h3 className="text-xl font-semibold text-red-600">Danger Zone</h3>
+        <p className="text-brand-secondary mt-2 mb-4">
+          Clearing all data will permanently delete all your transactions and custom categories. The app will be reset to its initial state. This action cannot be undone.
+        </p>
+        <button
+          onClick={onClearAllData}
+          className="px-4 py-2 text-sm rounded-md font-semibold bg-brand-accent text-white hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+        >
+          Clear All App Data
+        </button>
       </div>
     </div>
   );

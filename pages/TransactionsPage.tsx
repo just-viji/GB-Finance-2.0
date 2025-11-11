@@ -7,20 +7,20 @@ interface TransactionsPageProps {
   transactions: Transaction[];
   addTransaction: (transaction: Omit<Transaction, 'id' | 'date'>) => void;
   categories: string[];
-  addCategory: (category: string) => void;
   onTransactionClick: (transaction: Transaction) => void;
   transactionDescriptions: string[];
   itemDescriptions: string[];
+  showToast: (message: string, type?: 'success' | 'error') => void;
 }
 
 const TransactionsPage: React.FC<TransactionsPageProps> = ({
   transactions,
   addTransaction,
   categories,
-  addCategory,
   onTransactionClick,
   transactionDescriptions,
   itemDescriptions,
+  showToast,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -41,9 +41,9 @@ const TransactionsPage: React.FC<TransactionsPageProps> = ({
         <TransactionForm 
           onSubmit={addTransaction} 
           categories={categories} 
-          onAddCategory={addCategory} 
           transactionDescriptions={transactionDescriptions}
           itemDescriptions={itemDescriptions}
+          showToast={showToast}
         />
       </div>
       <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-md">

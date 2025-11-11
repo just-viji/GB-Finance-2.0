@@ -1,26 +1,29 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Transaction, TransactionType, PaymentMethod, TransactionLineItem } from '../types';
 import { PAYMENT_METHODS } from '../constants';
 import { calculateTotalAmount } from '../utils/transactionUtils';
+import { scanBillWithGemini, blobToBase64 } from '../services/geminiService';
+
 
 interface TransactionFormProps {
   onSubmit: (transaction: Omit<Transaction, 'id' | 'date'>) => void;
   categories: string[];
-  onAddCategory: (category: string) => void;
   transactionDescriptions: string[];
   itemDescriptions: string[];
+  showToast: (message: string, type?: 'success' | 'error') => void;
 }
 
-type ItemState = Omit<TransactionLineItem, 'id' | 'unitPrice'> & { unitPrice: string };
+type ItemState = Omit<TransactionLineItem, 'id' | 'unitPrice' | 'quantity'> & { unitPrice: string; quantity: string; };
 
-const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories, onAddCategory, transactionDescriptions, itemDescriptions }) => {
+const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories, transactionDescriptions, itemDescriptions, showToast }) => {
   const [type, setType] = useState<TransactionType>('sale');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState(categories[0]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Online');
-  const [items, setItems] = useState<ItemState[]>([{ description: '', quantity: 1, unitPrice: '' }]);
-  const [isAddingCategory, setIsAddingCategory] = useState(false);
-  const [newCategoryName, setNewCategoryName] = useState('');
+  const [items, setItems] = useState<ItemState[]>([{ description: '', quantity: '1', unitPrice: '' }]);
+  const [isScanning, setIsScanning] = useState(false);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   // When categories list updates (e.g., new category added), ensure `category` state is valid
   useEffect(() => {
@@ -30,19 +33,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
   }, [categories, category]);
   
   const grandTotal = useMemo(() => {
-    const numericItems = items.map(i => ({...i, id: '', unitPrice: parseFloat(i.unitPrice) || 0, quantity: i.quantity || 0}));
+    const numericItems = items.map(i => ({...i, id: '', unitPrice: parseFloat(i.unitPrice) || 0, quantity: parseFloat(i.quantity) || 0}));
     return calculateTotalAmount(numericItems);
   }, [items]);
 
-  const handleItemChange = (index: number, field: keyof ItemState, value: string | number) => {
+  const handleItemChange = (index: number, field: keyof ItemState, value: string) => {
     const newItems = [...items];
-    const item = newItems[index];
-    (item[field] as any) = value;
+    newItems[index] = {
+      ...newItems[index],
+      [field]: value
+    };
     setItems(newItems);
   };
 
   const addItem = () => {
-    setItems([...items, { description: '', quantity: 1, unitPrice: '' }]);
+    setItems([...items, { description: '', quantity: '1', unitPrice: '' }]);
   };
 
   const removeItem = (index: number) => {
@@ -51,19 +56,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
     }
   };
 
-  const handleAddCategory = () => {
-    const trimmedCategory = newCategoryName.trim();
-    if (trimmedCategory) {
-        onAddCategory(trimmedCategory);
-        setCategory(trimmedCategory);
-        setNewCategoryName('');
-        setIsAddingCategory(false);
-    }
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const hasInvalidItem = items.some(i => !i.description || (parseFloat(i.unitPrice) || 0) <= 0 || (i.quantity || 0) <= 0);
+    const hasInvalidItem = items.some(i => !i.description || (parseFloat(i.unitPrice) || 0) <= 0 || (parseFloat(i.quantity) || 0) <= 0);
     if (!description || items.length === 0 || hasInvalidItem) {
       alert('Please provide a main description and ensure all items have a description, a quantity greater than 0, and a price greater than 0.');
       return;
@@ -72,7 +67,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
     const finalItems = items.map(item => ({
       id: '', // will be set in App.tsx
       description: item.description,
-      quantity: item.quantity,
+      quantity: parseFloat(item.quantity),
       unitPrice: parseFloat(item.unitPrice)
     }));
     
@@ -87,7 +82,48 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
     setDescription('');
     setCategory(categories[0]);
     setPaymentMethod('Online');
-    setItems([{ description: '', quantity: 1, unitPrice: '' }]);
+    setItems([{ description: '', quantity: '1', unitPrice: '' }]);
+  };
+  
+  const handleCameraClick = () => {
+    cameraInputRef.current?.click();
+  };
+
+  const handleUploadClick = () => {
+    uploadInputRef.current?.click();
+  };
+
+
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsScanning(true);
+    try {
+      const base64Image = await blobToBase64(file);
+      const scannedItems = await scanBillWithGemini(base64Image);
+
+      if (scannedItems && scannedItems.length > 0) {
+        const newItems: ItemState[] = scannedItems.map(item => ({
+          description: item.description,
+          quantity: item.quantity.toString(),
+          unitPrice: item.unitPrice.toString(),
+        }));
+        setItems(newItems);
+        showToast('Bill scanned successfully!', 'success');
+      } else {
+        showToast('Could not find any items on the bill.', 'error');
+      }
+    } catch (error) {
+      console.error(error);
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
+      showToast(errorMessage, 'error');
+    } finally {
+      setIsScanning(false);
+      if (event.target) {
+        event.target.value = '';
+      }
+    }
   };
 
   return (
@@ -111,19 +147,57 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
 
         <div>
           <label htmlFor="description" className="block text-sm font-medium text-brand-secondary mb-1">Overall Description</label>
-          <input id="description" type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={type === 'sale' ? 'e.g., Project for Acme Corp' : 'e.g., Office supply run'} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary" list="transaction-descriptions-list"/>
+          <input id="description" type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={type === 'sale' ? 'e.g., Room booking for Mr. Smith' : 'e.g., Purchase of fresh produce'} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary" list="transaction-descriptions-list"/>
         </div>
         
         {/* Line Items */}
         <fieldset>
-             <legend className="text-sm font-medium text-brand-secondary mb-2">Items</legend>
+             <div className="flex justify-between items-center mb-2">
+                <legend className="text-sm font-medium text-brand-secondary">Items</legend>
+                {type === 'expense' && (
+                  <div className="flex items-center gap-2">
+                    {isScanning ? (
+                      <div className="flex items-center gap-2 text-sm font-semibold text-brand-primary" aria-live="polite">
+                        <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                        Scanning...
+                      </div>
+                    ) : (
+                      <>
+                        <button 
+                          type="button" 
+                          onClick={handleCameraClick}
+                          className="p-2 text-brand-primary rounded-full hover:bg-brand-primary/10 transition-colors"
+                          aria-label="Scan bill with camera"
+                          title="Scan bill with camera"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M2 6a2 2 0 012-2h1.172a2 2 0 011.414.586l.828.828A2 2 0 008.828 6H11.172a2 2 0 001.414-.586l.828-.828A2 2 0 0114.828 4H16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+                            <path fillRule="evenodd" d="M10 14a4 4 0 100-8 4 4 0 000 8zm0-2a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                        <button 
+                          type="button" 
+                          onClick={handleUploadClick}
+                          className="p-2 text-brand-primary rounded-full hover:bg-brand-primary/10 transition-colors"
+                          aria-label="Upload bill from device"
+                          title="Upload bill from device"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                              <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
+                          </svg>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+             </div>
             <div className="space-y-3">
                 {items.map((item, index) => {
-                    const lineTotal = (parseFloat(item.unitPrice) || 0) * (item.quantity || 0);
+                    const lineTotal = (parseFloat(item.unitPrice) || 0) * (parseFloat(item.quantity) || 0);
                     return (
                         <div key={index} className="grid grid-cols-12 gap-2 p-2 bg-gray-50 rounded-lg items-center">
                             <input type="text" placeholder="Item Description" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} className="col-span-12 sm:col-span-5 bg-white border border-gray-300 text-brand-dark rounded-md p-2 text-sm focus:ring-brand-primary focus:border-brand-primary" list="item-descriptions-list" />
-                            <input type="number" placeholder="Qty" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', parseInt(e.target.value, 10))} className="col-span-3 sm:col-span-2 bg-white border border-gray-300 text-brand-dark rounded-md p-2 text-sm focus:ring-brand-primary focus:border-brand-primary" min="1" />
+                            <input type="number" placeholder="Qty" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', e.target.value)} className="col-span-3 sm:col-span-2 bg-white border border-gray-300 text-brand-dark rounded-md p-2 text-sm focus:ring-brand-primary focus:border-brand-primary" min="0.01" step="any" />
                             <input type="number" placeholder="Price" value={item.unitPrice} onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value)} className="col-span-4 sm:col-span-2 bg-white border border-gray-300 text-brand-dark rounded-md p-2 text-sm focus:ring-brand-primary focus:border-brand-primary" min="0" step="0.01"/>
                             <div className="col-span-3 sm:col-span-2 text-right pr-1">
                                 <p className="text-sm font-medium text-brand-dark truncate">
@@ -138,6 +212,22 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
             </div>
         </fieldset>
 
+        <input
+            type="file"
+            ref={cameraInputRef}
+            onChange={handleFileChange}
+            className="hidden"
+            accept="image/*"
+            capture="environment"
+        />
+        <input
+            type="file"
+            ref={uploadInputRef}
+            onChange={handleFileChange}
+            className="hidden"
+            accept="image/*"
+        />
+
         <div className="flex justify-end font-bold text-lg text-brand-dark pr-2">
             Total: {grandTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
         </div>
@@ -146,32 +236,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
             {type === 'expense' && (
                 <div>
                   <label htmlFor="category" className="block text-sm font-medium text-brand-secondary mb-1">Category</label>
-                  {!isAddingCategory ? (
-                    <div className="flex gap-2">
-                      <select id="category" value={category} onChange={(e) => setCategory(e.target.value)} className="flex-grow w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary">
-                        {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                      </select>
-                      <button type="button" onClick={() => setIsAddingCategory(true)} title="Add new category" className="p-2 bg-gray-200 text-brand-dark rounded-md font-semibold hover:bg-gray-300 flex items-center justify-center">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 5a1 1 0 011 1v3h3a1 1 0 110 2h-3v3a1 1 0 11-2 0v-3H6a1 1 0 110-2h3V6a1 1 0 011-1z" clipRule="evenodd" /></svg>
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="bg-gray-100 p-3 rounded-md border border-gray-200">
-                        <p className="text-sm font-medium text-brand-secondary mb-2">Add New Category</p>
-                        <div className="flex gap-2">
-                            <input 
-                              type="text" 
-                              value={newCategoryName} 
-                              onChange={(e) => setNewCategoryName(e.target.value)}
-                              placeholder="e.g., Office Rent"
-                              autoFocus
-                              className="flex-grow w-full bg-white border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary"
-                            />
-                            <button type="button" onClick={handleAddCategory} className="px-4 py-2 bg-brand-primary text-white rounded-md text-sm font-semibold hover:bg-brand-primary-hover">Add</button>
-                            <button type="button" onClick={() => setIsAddingCategory(false)} className="px-4 py-2 bg-white border border-gray-300 text-brand-secondary rounded-md text-sm font-semibold hover:bg-gray-100">Cancel</button>
-                        </div>
-                    </div>
-                  )}
+                  <select id="category" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary">
+                    {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                  </select>
                 </div>
             )}
              <div className={type === 'sale' ? 'sm:col-span-2' : ''}>

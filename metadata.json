@@ -1,5 +1,7 @@
 {
   "name": "GB Finance 2.0",
   "description": "A simple and powerful sales and expense tracker.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "camera"
+  ]
 }

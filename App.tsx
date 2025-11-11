@@ -1,15 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import {
-    addCategory as addCategoryToSupabase,
-    deleteCategory as deleteCategoryFromSupabase,
-    getTransactions as getTransactionsFromSupabase,
-    getCategories as getCategoriesFromSupabase,
-    addTransaction as addTransactionToSupabase, 
-    updateTransaction as updateTransactionInSupabase,
-    deleteTransaction as deleteTransactionFromSupabase,
-    getCurrentUser,
-    signOut
-} from './services/supabase';
+import { loadData, saveTransactions, saveCategories, clearAllData as clearAllDataFromDB } from './services/supabase';
 import { Transaction, TransactionLineItem } from './types';
 import { INITIAL_CATEGORIES, PAYMENT_METHODS } from './constants';
 import { calculateTotalAmount } from './utils/transactionUtils';
@@ -21,12 +11,17 @@ import SettingsPage from './pages/SettingsPage';
 import Modal, { ModalProps } from './components/Modal';
 import Toast, { ToastProps } from './components/Toast';
 import TransactionDetailView from './components/reports/TransactionDetailView';
-import LoginPage from './pages/LoginPage';
-
 
 export type Page = 'home' | 'transactions' | 'reports' | 'settings';
 
 // Placed here to avoid creating a new file, as per user constraints.
+type FormTransactionItem = Omit<TransactionLineItem, 'quantity' | 'unitPrice'> & {
+    quantity: string;
+    unitPrice: string;
+};
+type FormTransaction = Omit<Transaction, 'items'> & {
+    items: FormTransactionItem[];
+};
 interface EditTransactionFormProps {
     transaction: Transaction;
     onSave: (transaction: Transaction) => void;
@@ -34,15 +29,30 @@ interface EditTransactionFormProps {
     categories: string[];
 }
 const EditTransactionForm: React.FC<EditTransactionFormProps> = ({ transaction, onSave, onCancel, categories }) => {
-    const [editedTransaction, setEditedTransaction] = useState(transaction);
+    const [editedTransaction, setEditedTransaction] = useState<FormTransaction>(() => ({
+        ...transaction,
+        items: transaction.items.map(item => ({
+            ...item,
+            quantity: String(item.quantity),
+            unitPrice: String(item.unitPrice),
+        }))
+    }));
 
     const handleSave = () => {
-        const hasInvalidItem = editedTransaction.items.some(i => !i.description || (i.unitPrice || 0) <= 0 || (i.quantity || 0) <= 0);
-        if (!editedTransaction.description || editedTransaction.items.length === 0 || hasInvalidItem) {
+        const finalTransaction: Transaction = {
+            ...editedTransaction,
+            items: editedTransaction.items.map(item => ({
+                ...item,
+                quantity: parseFloat(item.quantity) || 0,
+                unitPrice: parseFloat(item.unitPrice) || 0,
+            }))
+        };
+        const hasInvalidItem = finalTransaction.items.some(i => !i.description || (i.unitPrice || 0) <= 0 || (i.quantity || 0) <= 0);
+        if (!finalTransaction.description || finalTransaction.items.length === 0 || hasInvalidItem) {
             alert('Please provide a main description and ensure all items have a description, a quantity greater than 0, and a price greater than 0.');
             return;
         }
-        onSave(editedTransaction);
+        onSave(finalTransaction);
     };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -52,20 +62,20 @@ const EditTransactionForm: React.FC<EditTransactionFormProps> = ({ transaction, 
             const newIsoDate = `${value}T${timePart}`;
             setEditedTransaction(prev => ({ ...prev, date: newIsoDate }));
         } else {
-            setEditedTransaction(prev => ({ ...prev, [name]: value }));
+            setEditedTransaction(prev => ({ ...prev, [name]: value as any }));
         }
     };
 
-    const handleItemChange = (index: number, field: keyof TransactionLineItem, value: string | number) => {
+    const handleItemChange = (index: number, field: keyof Omit<FormTransactionItem, 'id'>, value: string) => {
         const newItems = [...editedTransaction.items];
         const item = {...newItems[index]};
-        (item[field] as any) = (field === 'quantity' || field === 'unitPrice') ? (typeof value === 'string' ? parseFloat(value) || 0 : value) : value;
+        item[field] = value;
         newItems[index] = item;
         setEditedTransaction(prev => ({ ...prev, items: newItems }));
     };
 
     const addItem = () => {
-        const newItem: TransactionLineItem = { id: new Date().getTime().toString(), description: '', quantity: 1, unitPrice: 0 };
+        const newItem: FormTransactionItem = { id: new Date().getTime().toString(), description: '', quantity: '1', unitPrice: '0' };
         setEditedTransaction(prev => ({ ...prev, items: [...prev.items, newItem] }));
     };
 
@@ -75,7 +85,10 @@ const EditTransactionForm: React.FC<EditTransactionFormProps> = ({ transaction, 
         }
     };
 
-    const editedTotal = calculateTotalAmount(editedTransaction.items);
+    const editedTotal = useMemo(() => {
+        const numericItems: TransactionLineItem[] = editedTransaction.items.map(i => ({...i, quantity: parseFloat(i.quantity) || 0, unitPrice: parseFloat(i.unitPrice) || 0}));
+        return calculateTotalAmount(numericItems);
+    }, [editedTransaction.items]);
 
     return (
         <div className="space-y-4">
@@ -94,351 +107,264 @@ const EditTransactionForm: React.FC<EditTransactionFormProps> = ({ transaction, 
                 <legend className="text-sm font-medium text-brand-secondary mb-2">Items</legend>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                     {editedTransaction.items.map((item, index) => {
-                        const lineTotal = (item.quantity || 0) * (item.unitPrice || 0);
+                        const lineTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0);
                         return (
                             <div key={item.id} className="grid grid-cols-12 gap-2 p-1 items-center">
                                 <input type="text" placeholder="Item Desc." value={item.description} onChange={e => handleItemChange(index, 'description', e.target.value)} className="col-span-12 sm:col-span-5 bg-white border border-gray-300 text-brand-dark rounded-md p-1 text-sm focus:ring-brand-primary focus:border-brand-primary" />
-                                <input type="number" placeholder="Qty" value={item.quantity} onChange={e => handleItemChange(index, 'quantity', parseFloat(e.target.value))} className="col-span-3 sm:col-span-2 bg-white border border-gray-300 text-brand-dark rounded-md p-1 text-sm focus:ring-brand-primary focus:border-brand-primary" min="1" />
-                                <input type="number" placeholder="Price" value={item.unitPrice} onChange={e => handleItemChange(index, 'unitPrice', parseFloat(e.target.value))} className="col-span-4 sm:col-span-2 bg-white border border-gray-300 text-brand-dark rounded-md p-1 text-sm focus:ring-brand-primary focus:border-brand-primary" min="0" step="0.01"/>
-                                <div className="col-span-3 sm:col-span-2 text-right pr-1">
-                                    <p className="text-sm font-medium text-brand-dark truncate">
-                                        {lineTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
-                                    </p>
+                                <input type="number" placeholder="Qty" value={item.quantity} onChange={e => handleItemChange(index, 'quantity', e.target.value)} className="col-span-3 sm:col-span-2 bg-white border border-gray-300 text-brand-dark rounded-md p-1 text-sm focus:ring-brand-primary focus:border-brand-primary" min="0.01" step="any" />
+                                <input type="number" placeholder="Price" value={item.unitPrice} onChange={e => handleItemChange(index, 'unitPrice', e.target.value)} className="col-span-4 sm:col-span-2 bg-white border border-gray-300 text-brand-dark rounded-md p-1 text-sm focus:ring-brand-primary focus:border-brand-primary" min="0" step="0.01" />
+                                <div className="col-span-3 sm:col-span-2 text-right">
+                                    <p className="text-xs font-medium text-brand-dark truncate">{lineTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</p>
                                 </div>
-                                <button type="button" onClick={() => removeItem(index)} disabled={editedTransaction.items.length <= 1} className="col-span-2 sm:col-span-1 flex justify-center items-center text-red-500 hover:bg-red-100 rounded-md disabled:opacity-50"><svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg></button>
+                                <button type="button" onClick={() => removeItem(index)} disabled={editedTransaction.items.length <= 1} className="col-span-2 sm:col-span-1 flex justify-center items-center text-red-500 hover:bg-red-100 rounded-full h-6 w-6 disabled:opacity-50 disabled:cursor-not-allowed"><svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 000 2h6a1 1 0 100-2H7z" clipRule="evenodd" /></svg></button>
                             </div>
-                        );
+                        )
                     })}
                 </div>
-                <button type="button" onClick={addItem} className="w-full text-xs font-semibold text-brand-primary hover:text-brand-primary-hover py-1">+ Add Item</button>
+                <button type="button" onClick={addItem} className="w-full text-sm font-semibold text-brand-primary hover:text-brand-primary-hover mt-2">+ Add Item</button>
             </fieldset>
-
-            <p className="text-right font-semibold">Total: {editedTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</p>
-            
-            <div className={`grid ${editedTransaction.type === 'expense' ? 'grid-cols-2' : 'grid-cols-1'} gap-4`}>
-                 {editedTransaction.type === 'expense' && (
-                    <div>
-                        <label className="text-sm font-medium text-brand-secondary mb-1 block">Category</label>
-                        <select name="category" value={editedTransaction.category} onChange={handleChange} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary">
-                            {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                        </select>
-                    </div>
-                 )}
-                 <div>
+            <div className="flex justify-end font-bold text-brand-dark pr-2">
+                Total: {editedTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+                {editedTransaction.type === 'expense' && (
+                  <div>
+                    <label className="text-sm font-medium text-brand-secondary mb-1 block">Category</label>
+                    <select name="category" value={editedTransaction.category} onChange={handleChange} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary">
+                      {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                    </select>
+                  </div>
+                )}
+                <div className={editedTransaction.type === 'sale' ? 'col-span-2' : ''}>
                     <label className="text-sm font-medium text-brand-secondary mb-1 block">Payment Method</label>
                     <select name="paymentMethod" value={editedTransaction.paymentMethod} onChange={handleChange} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary">
                         {PAYMENT_METHODS.map(method => <option key={method} value={method}>{method}</option>)}
                     </select>
-                 </div>
+                </div>
             </div>
-            <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button onClick={onCancel} className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
-                <button onClick={handleSave} className="px-4 py-2 text-sm rounded-md font-semibold bg-brand-primary text-white hover:bg-brand-primary-hover">Save Changes</button>
+             <div className="mt-6 flex flex-row-reverse gap-3 pt-4 border-t border-gray-200">
+                <button
+                    onClick={handleSave}
+                    className="inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 w-auto sm:text-sm transition-colors bg-brand-primary hover:bg-brand-primary-hover"
+                >
+                    Save Changes
+                </button>
+                <button
+                    onClick={onCancel}
+                    className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary"
+                >
+                    Cancel
+                </button>
             </div>
         </div>
     );
 };
 
-
-const App: React.FC = () => {
+export default function App() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [currentPage, setCurrentPage] = useState<Page>('home');
-  const [categories, setCategories] = useState<string[]>(INITIAL_CATEGORIES);
-  const [isDataLoaded, setIsDataLoaded] = useState(false);
-  const [user, setUser] = useState<any>(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
-
-
-  const [modalState, setModalState] = useState<Omit<ModalProps, 'onClose'>>({ isOpen: false, title: '', children: null });
-  const [toastState, setToastState] = useState<Omit<ToastProps, 'onClose'>>({ isVisible: false, message: '' });
-  
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToastState({ isVisible: true, message, type });
-  };
+  const [modalProps, setModalProps] = useState<Omit<ModalProps, 'onClose'>>({ isOpen: false, title: '', children: null });
+  const [toastProps, setToastProps] = useState<Omit<ToastProps, 'onClose'>>({ isVisible: false, message: '' });
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
 
   useEffect(() => {
-    const checkUser = async () => {
-        try {
-            const currentUser = await getCurrentUser();
-            setUser(currentUser);
-        } catch (error) {
-            // Not handling error, assuming it means user is not logged in
-        } finally {
-            setIsAuthLoading(false);
-        }
-    };
-    checkUser();
-}, []);
-  
-  // Load data from local storage on mount
-  useEffect(() => {
-    const loadData = async () => {
-        if (!user) return;
-        try {
-            const [loadedTransactions, loadedCategories] = await Promise.all([
-                getTransactionsFromSupabase(),
-                getCategoriesFromSupabase(),
-            ]);
-            setTransactions((loadedTransactions as Transaction[]).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-            setCategories((loadedCategories as string[]).sort());
-        } catch (error) {
-            showToast('Error fetching data', 'error');
-        } finally {
-            setIsDataLoaded(true);
-        }
-    };
-    loadData();
-  }, [user]);
-
-  useEffect(() => {
-    if (toastState.isVisible) {
-      const timer = setTimeout(() => setToastState(prev => ({...prev, isVisible: false})), 3000);
-      return () => clearTimeout(timer);
+    const { transactions: loadedTransactions, categories: loadedCategories, isNewUser } = loadData();
+    setTransactions(loadedTransactions);
+    setCategories(loadedCategories);
+    if(isNewUser) {
+        showToast('Welcome! Sample data has been loaded to get you started.', 'success');
     }
-  }, [toastState.isVisible]);
+  }, []);
 
-  const showModal = (config: Omit<ModalProps, 'isOpen' | 'onClose'>) => {
-    setModalState({ isOpen: true, ...config });
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    setToastProps({ message, type, isVisible: true });
+    setTimeout(() => {
+      setToastProps(prev => ({ ...prev, isVisible: false }));
+    }, 3000);
+  }, []);
+
+  const sortedTransactions = useMemo(() => {
+    return [...transactions].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [transactions]);
+
+  const stats = useMemo(() => {
+    return transactions.reduce((acc, t) => {
+      const totalAmount = calculateTotalAmount(t.items);
+      if (t.type === 'sale') {
+        acc.totalSales += totalAmount;
+      } else {
+        acc.totalExpenses += totalAmount;
+      }
+      return acc;
+    }, { totalSales: 0, totalExpenses: 0, netProfit: 0 });
+  }, [transactions]);
+  stats.netProfit = stats.totalSales - stats.totalExpenses;
+
+  const transactionDescriptions = useMemo(() => Array.from(new Set(transactions.map(t => t.description))), [transactions]);
+  const itemDescriptions = useMemo(() => Array.from(new Set(transactions.flatMap(t => t.items.map(i => i.description)))), [transactions]);
+
+  const addTransaction = useCallback((newTransactionData: Omit<Transaction, 'id' | 'date'>) => {
+    const newTransaction: Transaction = {
+      ...newTransactionData,
+      id: new Date().getTime().toString(),
+      date: new Date().toISOString(),
+      items: newTransactionData.items.map((item, index) => ({
+        ...item,
+        id: `${new Date().getTime()}-${index}`
+      }))
+    };
+    const updatedTransactions = [...transactions, newTransaction];
+    setTransactions(updatedTransactions);
+    saveTransactions(updatedTransactions);
+    showToast(`${newTransaction.type === 'sale' ? 'Sale' : 'Expense'} added successfully!`, 'success');
+  }, [transactions, showToast]);
+
+  const updateTransaction = (updatedTransaction: Transaction) => {
+     const updatedTransactions = transactions.map(t => t.id === updatedTransaction.id ? updatedTransaction : t);
+     setTransactions(updatedTransactions);
+     saveTransactions(updatedTransactions);
+     setSelectedTransaction(null); // Close modal
+     setModalProps({isOpen: false, title: '', children: null}); // also close the edit modal
+     showToast('Transaction updated successfully!', 'success');
+  }
+
+  const handleDeleteRequest = () => {
+    if (!selectedTransaction) return;
+    
+    // Capture the transaction before closing the detail modal
+    const transactionToDelete = selectedTransaction;
+    // Close the detail modal
+    setSelectedTransaction(null);
+    
+     setModalProps({
+        isOpen: true,
+        title: 'Confirm Deletion',
+        children: `Are you sure you want to delete the transaction: "${transactionToDelete.description}"? This action cannot be undone.`,
+        onConfirm: () => {
+            handleDeleteConfirm(transactionToDelete.id)
+            setModalProps({isOpen: false, title: '', children: null});
+        },
+        confirmText: 'Delete',
+        confirmVariant: 'danger'
+    });
+  }
+
+  const handleDeleteConfirm = (id: string) => {
+    const updatedTransactions = transactions.filter(t => t.id !== id);
+    setTransactions(updatedTransactions);
+    saveTransactions(updatedTransactions);
+    showToast('Transaction deleted.', 'success');
+  }
+  
+  const addCategory = useCallback((newCategory: string) => {
+    if (categories.some(c => c.toLowerCase() === newCategory.toLowerCase())) {
+        showToast('Category already exists.', 'error');
+        return;
+    }
+    const updatedCategories = [...categories, newCategory].sort();
+    setCategories(updatedCategories);
+    saveCategories(updatedCategories);
+    showToast('Category added.', 'success');
+  }, [categories, showToast]);
+
+  const deleteCategory = useCallback((categoryToDelete: string) => {
+    if(transactions.some(t => t.category === categoryToDelete)) {
+        showToast('Cannot delete category as it is used in some transactions.', 'error');
+        return;
+    }
+    const updatedCategories = categories.filter(c => c !== categoryToDelete);
+    setCategories(updatedCategories);
+    saveCategories(updatedCategories);
+    showToast('Category deleted.', 'success');
+  }, [categories, transactions, showToast]);
+  
+  const handleClearAllData = () => {
+    setModalProps({
+        isOpen: true,
+        title: 'Clear All Data',
+        children: 'Are you sure you want to delete all transactions and categories? This is irreversible.',
+        onConfirm: () => {
+            clearAllDataFromDB();
+            setTransactions([]);
+            setCategories(INITIAL_CATEGORIES); // Reset to initial
+            showToast('All data has been cleared.', 'success');
+            setModalProps({isOpen: false, title: '', children: null});
+            setCurrentPage('home');
+        },
+        confirmText: 'Clear Data',
+        confirmVariant: 'danger'
+    });
   };
 
   const closeModal = () => {
-    setModalState(prev => ({...prev, isOpen: false}));
+    setModalProps({ isOpen: false, title: '', children: null });
   };
-
-  const { totalSales, totalExpenses, netProfit } = useMemo(() => {
-    const sales = transactions
-      .filter(t => t.type === 'sale')
-      .reduce((sum, t) => sum + calculateTotalAmount(t.items), 0);
-    const expenses = transactions
-      .filter(t => t.type === 'expense')
-      .reduce((sum, t) => sum + calculateTotalAmount(t.items), 0);
-    return {
-      totalSales: sales,
-      totalExpenses: expenses,
-      netProfit: sales - expenses,
-    };
-  }, [transactions]);
   
-  const transactionDescriptions = useMemo(() => (
-    [...new Set(transactions.map(t => t.description.trim()).filter(Boolean))]
-  ), [transactions]);
-
-  const itemDescriptions = useMemo(() => (
-    [...new Set(transactions.flatMap(t => t.items.map(i => i.description.trim())).filter(Boolean))]
-  ), [transactions]);
-
-  const addTransaction = async (transaction: Omit<Transaction, 'id' | 'date'>) => {
-    try {
-        const newTransaction: Omit<Transaction, 'id'> = {
-            ...transaction,
-            date: new Date().toISOString(),
-            items: transaction.items.map(item => ({...item, id: new Date().getTime().toString() + Math.random()})),
-        };
-        
-        const returnedTransaction = await addTransactionToSupabase(newTransaction);
-
-        const updatedTransactions = [returnedTransaction[0], ...transactions]
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        
-        setTransactions(updatedTransactions);
-        showToast('Transaction added successfully!');
-    } catch (error) {
-        showToast('Error adding transaction', 'error');
-    }
-  };
-
-  const updateTransaction = async (updatedTransaction: Transaction) => {
-    try {
-        await updateTransactionInSupabase(updatedTransaction);
-        const updatedTransactions = transactions
-            .map(t => (t.id === updatedTransaction.id ? updatedTransaction : t))
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        
-        setTransactions(updatedTransactions);
-        showToast('Transaction updated successfully!');
-    } catch (error) {
-        showToast('Error updating transaction', 'error');
-    }
-  };
-
-  const deleteTransactionInDB = async (id: string) => {
-    try {
-        await deleteTransactionFromSupabase(id);
-        const updatedTransactions = transactions.filter(t => t.id !== id);
-        setTransactions(updatedTransactions);
-        showToast('Transaction deleted.', 'success');
-        closeModal();
-    } catch (error) {
-        showToast('Error deleting transaction', 'error');
-        closeModal();
-    }
+  const handleTransactionSelect = (transaction: Transaction) => {
+    setSelectedTransaction(transaction);
   }
-
-  const deleteTransaction = (id: string) => {
-     showModal({
-        title: 'Delete Transaction',
-        children: <p>Are you sure you want to delete this transaction? This action cannot be undone.</p>,
-        confirmText: 'Delete',
-        onConfirm: () => deleteTransactionInDB(id),
-        confirmVariant: 'danger'
-     });
-  };
-  
-  const addCategory = async (category: string) => {
-    if (category && !categories.find(c => c.toLowerCase() === category.toLowerCase())) {
-        try {
-            await addCategoryToSupabase(category);
-            const updatedCategories = [...categories, category].sort();
-            setCategories(updatedCategories);
-            showToast(`Category "${category}" added.`);
-        } catch (error) {
-            showToast('Error adding category', 'error');
-        }
-    } else if (category) {
-        showToast(`Category "${category}" already exists.`, 'error');
-    }
-  };
-
-  const deleteCategoryFromDB = async (categoryToDelete: string) => {
-    try {
-        await deleteCategoryFromSupabase(categoryToDelete);
-        const updatedCategories = categories.filter(c => c !== categoryToDelete);
-        setCategories(updatedCategories);
-        showToast(`Category "${categoryToDelete}" deleted.`);
-        closeModal();
-    } catch (error) {
-        showToast('Error deleting category', 'error');
-        closeModal();
-    }
-  };
-
-  const deleteCategory = (categoryToDelete: string) => {
-    const isCategoryInUse = transactions.some(t => t.category === categoryToDelete);
-    if (isCategoryInUse) {
-        showModal({
-            title: 'Cannot Delete Category',
-            children: <p>This category is currently in use by one or more transactions. Please reassign them before deleting.</p>,
-        });
-        return;
-    }
-    showModal({
-        title: 'Delete Category',
-        children: <p>Are you sure you want to delete the category "{categoryToDelete}"?</p>,
-        confirmText: 'Delete',
-        onConfirm: () => deleteCategoryFromDB(categoryToDelete),
-        confirmVariant: 'danger'
-    });
-  };
-  
-  const handleStartEdit = (transaction: Transaction) => {
-    showModal({
-      title: 'Edit Transaction',
-      children: <EditTransactionForm 
-                  transaction={transaction} 
-                  categories={categories} 
-                  onSave={(updatedTransaction) => {
-                    updateTransaction(updatedTransaction);
-                    closeModal();
-                  }}
-                  onCancel={closeModal}
-                />,
-      hideFooter: true,
-    });
-  };
-  
-  const handleViewTransaction = (transaction: Transaction) => {
-    showModal({
-      title: `Transaction Details`,
-      children: <TransactionDetailView 
-                  transaction={transaction} 
-                  onEdit={() => handleStartEdit(transaction)}
-                  onDelete={() => {
-                    closeModal();
-                    // This now calls the modal version of delete
-                    deleteTransaction(transaction.id);
-                  }}
-                />,
-      hideFooter: true,
-    });
-  };
-
-  const handleLogout = async () => {
-    await signOut();
-    setUser(null);
-    setTransactions([]);
-    setCategories([]);
-    setIsDataLoaded(false);
-    setCurrentPage('home');
-    showToast('You have been logged out.');
-  };
 
   const renderPage = () => {
-    if (!isDataLoaded) {
-        return <div className="flex justify-center items-center h-64"><p>Loading...</p></div>;
-    }
     switch (currentPage) {
       case 'home':
-        return <HomePage 
-                  stats={{ totalSales, totalExpenses, netProfit }} 
-                  transactions={transactions}
-                  onTransactionClick={handleViewTransaction}
-               />;
+        return <HomePage stats={stats} transactions={sortedTransactions} onTransactionClick={handleTransactionSelect} />;
       case 'transactions':
         return <TransactionsPage 
-                  transactions={transactions} 
-                  addTransaction={addTransaction}
-                  categories={categories}
-                  addCategory={addCategory}
-                  onTransactionClick={handleViewTransaction}
-                  transactionDescriptions={transactionDescriptions}
-                  itemDescriptions={itemDescriptions}
-               />;
+          transactions={sortedTransactions} 
+          addTransaction={addTransaction} 
+          categories={categories}
+          onTransactionClick={handleTransactionSelect}
+          transactionDescriptions={transactionDescriptions}
+          itemDescriptions={itemDescriptions}
+          showToast={showToast}
+        />;
       case 'reports':
-        return <ReportsPage 
-                  transactions={transactions} 
-                  categories={categories} 
-                  onTransactionClick={handleViewTransaction}
-                />;
+        return <ReportsPage transactions={transactions} categories={categories} onTransactionClick={handleTransactionSelect} />;
       case 'settings':
-        return <SettingsPage transactions={transactions} onLogout={handleLogout} />;
+        return <SettingsPage 
+            categories={categories} 
+            onAddCategory={addCategory}
+            onDeleteCategory={deleteCategory}
+            onClearAllData={handleClearAllData}
+        />;
       default:
-        return <HomePage 
-                  stats={{ totalSales, totalExpenses, netProfit }} 
-                  transactions={transactions}
-                  onTransactionClick={handleViewTransaction}
-                />;
+        return <HomePage stats={stats} transactions={sortedTransactions} onTransactionClick={handleTransactionSelect} />;
     }
   };
-
-  if (isAuthLoading) {
-    return <div className="flex justify-center items-center h-screen"><p>Loading...</p></div>;
-  }
-
-  if (!user) {
-      return <LoginPage showToast={showToast} setUser={setUser} />;
-  }
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <header className="bg-white shadow-sm p-4 border-b border-gray-200 text-center sticky top-0 z-10">
-          <h1 className="text-xl md:text-2xl font-bold text-brand-primary">
-          GB Finance 2.0
-          </h1>
-      </header>
-      
-      <main className="container mx-auto p-4 md:p-6 lg:p-8 pb-24">
-          {renderPage()}
+      <main className="p-4 pb-24 md:max-w-7xl md:mx-auto">
+        {renderPage()}
       </main>
-      
-      <BottomNav
-        currentPage={currentPage} 
-        setCurrentPage={setCurrentPage} 
-      />
+      <BottomNav currentPage={currentPage} setCurrentPage={setCurrentPage} />
+      <Modal {...modalProps} onClose={closeModal} />
+      <Toast {...toastProps} onClose={() => setToastProps(prev => ({ ...prev, isVisible: false }))} />
 
-      <Modal {...modalState} onClose={closeModal} />
-      <Toast {...toastState} onClose={() => setToastState(prev => ({...prev, isVisible: false}))} />
+      {/* Detail/Edit View Modal */}
+      <Modal isOpen={!!selectedTransaction} onClose={() => setSelectedTransaction(null)} title="Transaction Details" hideFooter>
+        {selectedTransaction && (
+            <TransactionDetailView 
+                transaction={selectedTransaction}
+                onEdit={() => {
+                   setModalProps({
+                        isOpen: true,
+                        title: "Edit Transaction",
+                        children: <EditTransactionForm 
+                            transaction={selectedTransaction}
+                            onSave={updateTransaction}
+                            onCancel={() => setModalProps({isOpen: false, title: '', children: null})}
+                            categories={categories}
+                        />,
+                        hideFooter: true
+                   });
+                   setSelectedTransaction(null); // Close the detail view behind
+                }}
+                onDelete={handleDeleteRequest}
+            />
+        )}
+      </Modal>
     </div>
   );
-};
-
-export default App;
+}

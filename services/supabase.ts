@@ -1,126 +1,60 @@
-import { createClient } from '@supabase/supabase-js';
 import { Transaction } from '../types';
+import { INITIAL_CATEGORIES } from '../constants';
 
-// Initialize Supabase
-const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
-const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
+const TRANSACTIONS_KEY = 'gb-finance-transactions';
+const CATEGORIES_KEY = 'gb-finance-categories';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Supabase URL and anon key are required.");
+// Seed initial data for new users
+const seedInitialData = () => {
+    const sampleTransactions: Omit<Transaction, 'id'>[] = [
+        { type: 'sale', description: 'Room booking - Deluxe Suite', date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), category: 'Sale', paymentMethod: 'Online', items: [{id: '1a', description: 'Room Charge', quantity: 2, unitPrice: 8500}] },
+        { type: 'expense', description: 'Guest toiletries order', date: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(), category: 'Guest Supplies (Toiletries, etc.)', paymentMethod: 'Online', items: [{id: '2a', description: 'Shampoo, Soap, etc.', quantity: 1, unitPrice: 15000}] },
+        { type: 'sale', description: 'Restaurant Dinner - Table 5', date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(), category: 'Sale', paymentMethod: 'Cash', items: [{id: '3a', description: 'Food & Drinks', quantity: 1, unitPrice: 4500}] },
+        { type: 'expense', description: 'Monthly electricity bill', date: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(), category: 'Utilities (Electricity, Water)', paymentMethod: 'Online', items: [{id: '4a', description: 'Electricity Bill', quantity: 1, unitPrice: 75000}] },
+    ];
+    
+    const transactionsWithIds: Transaction[] = sampleTransactions.map((t, index) => ({
+        ...t,
+        id: `${new Date().getTime()}-${index}`,
+        items: t.items.map((item, itemIndex) => ({...item, id: `${new Date().getTime()}-${index}-${itemIndex}`}))
+    }));
+
+    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactionsWithIds));
+    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(INITIAL_CATEGORIES.sort()));
+
+    return { transactions: transactionsWithIds, categories: INITIAL_CATEGORIES.sort() };
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const loadData = (): { transactions: Transaction[], categories: string[], isNewUser: boolean } => {
+    const transactionsStr = localStorage.getItem(TRANSACTIONS_KEY);
+    const categoriesStr = localStorage.getItem(CATEGORIES_KEY);
 
-// Authentication Functions
-export const signUp = async (email, password) => {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-  });
-  if (error) throw error;
-  return data;
+    if (!transactionsStr || !categoriesStr) {
+        const { transactions, categories } = seedInitialData();
+        return { transactions, categories, isNewUser: true };
+    }
+
+    try {
+        const transactions: Transaction[] = JSON.parse(transactionsStr);
+        const categories: string[] = JSON.parse(categoriesStr);
+        return { transactions: transactions.map(t => ({...t, date: new Date(t.date).toISOString()})), categories, isNewUser: false };
+    } catch (e) {
+        console.error("Failed to parse data from localStorage", e);
+        // Clear corrupted data and re-seed
+        const { transactions, categories } = seedInitialData();
+        return { transactions, categories, isNewUser: true };
+    }
 };
 
-export const signIn = async (email, password) => {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
-  if (error) throw error;
-  return data;
+export const saveTransactions = (transactions: Transaction[]) => {
+    localStorage.setItem(TRANSACTIONS_KEY, JSON.stringify(transactions));
 };
 
-export const signOut = async () => {
-  const { error } = await supabase.auth.signOut();
-  if (error) throw error;
+export const saveCategories = (categories: string[]) => {
+    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(categories));
 };
 
-export const getCurrentUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    return session?.user ?? null;
-}
-
-// Data Functions
-export const getTransactions = async () => {
-  const user = await getCurrentUser();
-  if (!user) return [];
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('*')
-    .eq('user_id', user.id);
-  if (error) throw error;
-  return data;
+export const clearAllData = () => {
+    localStorage.removeItem(TRANSACTIONS_KEY);
+    localStorage.removeItem(CATEGORIES_KEY);
 };
-
-export const addTransaction = async (transaction: Omit<Transaction, 'id'>) => {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("User not authenticated to add transaction.");
-
-  const transactionWithUser = { ...transaction, user_id: user.id };
-
-  const { data, error } = await supabase
-    .from('transactions')
-    .insert([transactionWithUser])
-    .select();
-
-  if (error) throw error;
-  return data;
-};
-
-export const getCategories = async () => {
-  const user = await getCurrentUser();
-  if (!user) return [];
-  const { data, error } = await supabase
-    .from('categories')
-    .select('name')
-    .eq('user_id', user.id);
-  if (error) throw error;
-  return data?.map(c => c.name) || [];
-};
-
-export const addCategory = async (category: string) => {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("User not authenticated");
-
-  const { data, error } = await supabase
-    .from('categories')
-    .insert([{ name: category, user_id: user.id }]);
-  if (error) throw error;
-  return data;
-};
-
-export const deleteCategory = async (categoryName: string) => {
-    const user = await getCurrentUser();
-    if (!user) throw new Error("User not authenticated");
-    const { data, error } = await supabase
-        .from('categories')
-        .delete()
-        .eq('name', categoryName)
-        .eq('user_id', user.id);
-    if (error) throw error;
-    return data;
-}
-
-export const updateTransaction = async (transaction: Transaction) => {
-    const user = await getCurrentUser();
-    if (!user) throw new Error("User not authenticated");
-    const { data, error } = await supabase
-        .from('transactions')
-        .update(transaction)
-        .eq('id', transaction.id)
-        .eq('user_id', user.id);
-    if (error) throw error;
-    return data;
-}
-
-export const deleteTransaction = async (transactionId: string) => {
-    const user = await getCurrentUser();
-    if (!user) throw new Error("User not authenticated");
-    const { data, error } = await supabase
-        .from('transactions')
-        .delete()
-        .eq('id', transactionId)
-        .eq('user_id', user.id);
-    if (error) throw error;
-    return data;
-}
