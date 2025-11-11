@@ -433,6 +433,22 @@ export default function App() {
   }
 
   if (!isConfigured) {
+    if (currentPage === 'settings') {
+      return (
+        <div className="min-h-screen bg-gray-100">
+          <main className="p-4 md:max-w-7xl md:mx-auto">
+            <SettingsPage 
+              categories={categories} 
+              onAddCategory={addCategory}
+              onDeleteCategory={deleteCategory}
+              onClearAllData={handleClearAllData}
+              onConnect={handleConnect}
+              onDisconnect={handleDisconnect}
+            />
+          </main>
+        </div>
+      );
+    }
     return <NotConfiguredScreen onConfigure={() => setCurrentPage('settings')} />
   }
 
