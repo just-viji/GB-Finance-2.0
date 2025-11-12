@@ -13,6 +13,7 @@ import Modal, { ModalProps } from './components/Modal';
 import Toast, { ToastProps } from './components/Toast';
 import TransactionDetailView from './components/reports/TransactionDetailView';
 import LoginPage from './pages/LoginPage';
+import Header from './components/Header';
 
 export type Page = 'home' | 'transactions' | 'reports' | 'settings';
 
@@ -57,12 +58,22 @@ const EditTransactionForm: React.FC<EditTransactionFormProps> = ({ transaction, 
         onSave(finalTransaction);
     };
 
+    const toInputDateString = (isoString: string): string => {
+        if (!isoString) return '';
+        const date = new Date(isoString);
+        const year = date.getFullYear();
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const day = date.getDate().toString().padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
         if (name === 'date') {
-            const timePart = editedTransaction.date.includes('T') ? editedTransaction.date.split('T')[1] : '00:00:00.000Z';
-            const newIsoDate = `${value}T${timePart}`;
-            setEditedTransaction(prev => ({ ...prev, date: newIsoDate }));
+            const [year, month, day] = value.split('-').map(Number);
+            // We set it to noon local time to avoid timezone boundary issues.
+            const newDate = new Date(year, month - 1, day, 12, 0, 0);
+            setEditedTransaction(prev => ({ ...prev, date: newDate.toISOString() }));
         } else {
             setEditedTransaction(prev => ({ ...prev, [name]: value as any }));
         }
@@ -101,7 +112,7 @@ const EditTransactionForm: React.FC<EditTransactionFormProps> = ({ transaction, 
                 </div>
                 <div className="md:col-span-2">
                     <label className="text-sm font-medium text-brand-secondary mb-1 block">Date</label>
-                    <input type="date" name="date" value={editedTransaction.date.split('T')[0]} onChange={handleChange} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary" />
+                    <input type="date" name="date" value={toInputDateString(editedTransaction.date)} onChange={handleChange} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary" />
                 </div>
             </div>
             
@@ -153,6 +164,42 @@ const EditTransactionForm: React.FC<EditTransactionFormProps> = ({ transaction, 
                 </button>
                 <button
                     onClick={onCancel}
+                    className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary"
+                >
+                    Cancel
+                </button>
+            </div>
+        </div>
+    );
+};
+
+const ConfirmDeleteAllData: React.FC<{ onConfirm: () => void; onClose: () => void; }> = ({ onConfirm, onClose }) => {
+    const [inputValue, setInputValue] = useState('');
+    const isMatch = inputValue === 'DELETE';
+
+    return (
+        <div>
+            <p className="mb-4 text-brand-secondary">
+                To confirm, please type <strong>DELETE</strong> in the box below. This action cannot be undone.
+            </p>
+            <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary"
+                placeholder="Type DELETE to confirm"
+                autoFocus
+            />
+            <div className="mt-6 flex flex-row-reverse gap-3 pt-4 border-t border-gray-200">
+                <button
+                    onClick={onConfirm}
+                    disabled={!isMatch}
+                    className="inline-flex justify-center rounded-md border border-transparent px-4 py-2 text-sm font-semibold text-white shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 w-auto sm:text-sm transition-colors bg-brand-accent hover:bg-red-600 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                    Permanently Delete
+                </button>
+                <button
+                    onClick={onClose}
                     className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-primary"
                 >
                     Cancel
@@ -258,11 +305,10 @@ export default function App() {
   const transactionDescriptions = useMemo(() => Array.from(new Set(transactions.map(t => t.description))), [transactions]);
   const itemDescriptions = useMemo(() => Array.from(new Set(transactions.flatMap(t => t.items.map(i => i.description)))), [transactions]);
 
-  const addTransaction = async (newTransactionData: Omit<Transaction, 'id' | 'date'>) => {
+  const addTransaction = async (newTransactionData: Omit<Transaction, 'id'>) => {
     const newTransaction: Transaction = {
       ...newTransactionData,
       id: new Date().getTime().toString(),
-      date: new Date().toISOString(),
       items: newTransactionData.items.map((item, index) => ({
         ...item,
         id: `${new Date().getTime()}-${index}`
@@ -370,25 +416,41 @@ export default function App() {
     }
   };
   
+  const closeModal = () => {
+    setModalProps({ isOpen: false, title: '', children: null });
+  };
+  
   const handleClearAllData = () => {
     setModalProps({
         isOpen: true,
-        title: 'Clear All Data',
-        children: 'Are you sure you want to delete all transactions and categories from your Google Sheet? This is irreversible.',
-        onConfirm: async () => {
-            try {
-                await clearAllDataFromDB();
-                setTransactions([]);
-                setCategories(INITIAL_CATEGORIES); // Reset to initial
-                showToast('All data has been cleared.', 'success');
-            } catch (e) {
-                showToast(`Failed to clear data: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
-            } finally {
-                setModalProps({isOpen: false, title: '', children: null});
-                setCurrentPage('home');
-            }
+        title: 'Clear All Data - Step 1 of 2',
+        children: 'This will permanently delete all transactions and categories from your Google Sheet. This action is irreversible. Are you sure you want to proceed?',
+        onConfirm: () => {
+            setModalProps({
+                isOpen: true,
+                title: 'Confirm Permanent Deletion',
+                hideFooter: true,
+                children: (
+                    <ConfirmDeleteAllData 
+                        onConfirm={async () => {
+                            try {
+                                await clearAllDataFromDB();
+                                setTransactions([]);
+                                setCategories(INITIAL_CATEGORIES);
+                                showToast('All data has been cleared.', 'success');
+                            } catch (e) {
+                                showToast(`Failed to clear data: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error');
+                            } finally {
+                                setModalProps({isOpen: false, title: '', children: null});
+                                setCurrentPage('home');
+                            }
+                        }}
+                        onClose={closeModal}
+                    />
+                )
+            });
         },
-        confirmText: 'Clear Data',
+        confirmText: 'Proceed to Confirmation',
         confirmVariant: 'danger'
     });
   };
@@ -405,10 +467,6 @@ export default function App() {
     setCategories([]);
   };
 
-  const closeModal = () => {
-    setModalProps({ isOpen: false, title: '', children: null });
-  };
-  
   const handleTransactionSelect = (transaction: Transaction) => {
     setSelectedTransaction(transaction);
   }
@@ -430,7 +488,8 @@ export default function App() {
       case 'reports':
         return <ReportsPage transactions={transactions} categories={categories} onTransactionClick={handleTransactionSelect} />;
       case 'settings':
-        return <SettingsPage 
+        return <SettingsPage
+            transactions={sortedTransactions}
             categories={categories} 
             onAddCategory={addCategory}
             onDeleteCategory={deleteCategory}
@@ -456,8 +515,10 @@ export default function App() {
     if (currentPage === 'settings') {
       return (
         <div className="min-h-screen bg-gray-100">
-          <main className="p-4 md:max-w-7xl md:mx-auto">
-            <SettingsPage 
+          <Header />
+          <main className="px-4 pt-20 md:max-w-7xl md:mx-auto">
+            <SettingsPage
+              transactions={sortedTransactions}
               categories={categories} 
               onAddCategory={addCategory}
               onDeleteCategory={deleteCategory}
@@ -475,7 +536,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      <main className="p-4 pb-24 md:max-w-7xl md:mx-auto">
+      <Header />
+      <main className="px-4 pt-20 pb-24 md:max-w-7xl md:mx-auto">
         {renderPage()}
       </main>
       <BottomNav currentPage={currentPage} setCurrentPage={setCurrentPage} />

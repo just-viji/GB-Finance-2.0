@@ -6,7 +6,7 @@ import { scanBillWithGemini, blobToBase64 } from '../services/geminiService';
 
 
 interface TransactionFormProps {
-  onSubmit: (transaction: Omit<Transaction, 'id' | 'date'>) => void;
+  onSubmit: (transaction: Omit<Transaction, 'id'>) => void;
   categories: string[];
   transactionDescriptions: string[];
   itemDescriptions: string[];
@@ -18,6 +18,13 @@ type ItemState = Omit<TransactionLineItem, 'id' | 'unitPrice' | 'quantity'> & { 
 const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories, transactionDescriptions, itemDescriptions, showToast }) => {
   const [type, setType] = useState<TransactionType>('sale');
   const [description, setDescription] = useState('');
+  const [date, setDate] = useState(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = (today.getMonth() + 1).toString().padStart(2, '0');
+    const day = today.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  });
   const [category, setCategory] = useState(categories[0]);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Online');
   const [items, setItems] = useState<ItemState[]>([{ description: '', quantity: '1', unitPrice: '' }]);
@@ -71,15 +78,27 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
       unitPrice: parseFloat(item.unitPrice)
     }));
     
+    const [year, month, day] = date.split('-').map(Number);
+    // We set it to noon local time to avoid timezone boundary issues.
+    const transactionDate = new Date(year, month - 1, day, 12, 0, 0);
+    
     onSubmit({
       type,
       description,
+      date: transactionDate.toISOString(),
       category: type === 'sale' ? 'Sale' : category,
       paymentMethod,
       items: finalItems,
     });
 
     setDescription('');
+    setDate(() => {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = (today.getMonth() + 1).toString().padStart(2, '0');
+        const day = today.getDate().toString().padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    });
     setCategory(categories[0]);
     setPaymentMethod('Online');
     setItems([{ description: '', quantity: '1', unitPrice: '' }]);
@@ -145,9 +164,15 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
           </div>
         </fieldset>
 
-        <div>
-          <label htmlFor="description" className="block text-sm font-medium text-brand-secondary mb-1">Overall Description</label>
-          <input id="description" type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={type === 'sale' ? 'e.g., Room booking for Mr. Smith' : 'e.g., Purchase of fresh produce'} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary" list="transaction-descriptions-list"/>
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="md:col-span-3">
+                <label htmlFor="description" className="block text-sm font-medium text-brand-secondary mb-1">Overall Description</label>
+                <input id="description" type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={type === 'sale' ? 'e.g., Room booking for Mr. Smith' : 'e.g., Purchase of fresh produce'} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary" list="transaction-descriptions-list"/>
+            </div>
+            <div className="md:col-span-2">
+                <label htmlFor="date" className="block text-sm font-medium text-brand-secondary mb-1">Date</label>
+                <input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary" />
+            </div>
         </div>
         
         {/* Line Items */}

@@ -5,7 +5,7 @@ import TransactionList from '../components/TransactionList';
 
 interface TransactionsPageProps {
   transactions: Transaction[];
-  addTransaction: (transaction: Omit<Transaction, 'id' | 'date'>) => void;
+  addTransaction: (transaction: Omit<Transaction, 'id'>) => void;
   categories: string[];
   onTransactionClick: (transaction: Transaction) => void;
   transactionDescriptions: string[];
