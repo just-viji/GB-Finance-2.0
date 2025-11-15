@@ -1,16 +1,33 @@
 import React, { useMemo } from 'react';
-import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip, Legend } from 'recharts';
+import { ResponsiveContainer, BarChart, Bar, Cell, XAxis, YAxis, Tooltip } from 'recharts';
 import { Transaction } from '../../types';
 import { calculateTotalAmount } from '../../utils/transactionUtils';
 import EmptyState from '../EmptyState';
 
 interface CategoryExpenseChartProps {
   transactions: Transaction[];
+  onSliceClick: (category: string) => void;
+  selectedCategory: string | null;
 }
 
 const COLORS = ['#14b8a6', '#f43f5e', '#3b82f6', '#f97316', '#8b5cf6', '#ec4899', '#65a30d', '#0891b2'];
 
-const CategoryExpenseChart: React.FC<CategoryExpenseChartProps> = ({ transactions }) => {
+const CustomizedAxisTick = (props: any) => {
+    const { x, y, payload } = props;
+    const label = payload.value as string;
+    // Truncate label if it's too long to prevent overlap
+    const truncatedLabel = label.length > 12 ? `${label.substring(0, 10)}...` : label;
+    return (
+        <g transform={`translate(${x},${y})`}>
+            <text x={0} y={0} dy={16} textAnchor="end" fill="#64748b" transform="rotate(-40)" fontSize={12}>
+                {truncatedLabel}
+            </text>
+        </g>
+    );
+};
+
+
+const CategoryExpenseChart: React.FC<CategoryExpenseChartProps> = ({ transactions, onSliceClick, selectedCategory }) => {
   const chartData = useMemo(() => {
     const expenseData = transactions.filter(t => t.type === 'expense');
     if (expenseData.length === 0) return [];
@@ -41,31 +58,21 @@ const CategoryExpenseChart: React.FC<CategoryExpenseChartProps> = ({ transaction
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <PieChart>
-        <Pie
-          data={chartData}
-          cx="50%"
-          cy="50%"
-          labelLine={false}
-          outerRadius={90}
-          fill="#8884d8"
-          dataKey="value"
-          nameKey="name"
-          label={({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
-             const radius = innerRadius + (outerRadius - innerRadius) * 1.3;
-             const x = cx + radius * Math.cos(-midAngle * (Math.PI / 180));
-             const y = cy + radius * Math.sin(-midAngle * (Math.PI / 180));
-             return (percent * 100) > 3 ? (
-                <text x={x} y={y} fill="#334155" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" fontSize="12">
-                   {`${(percent * 100).toFixed(0)}%`}
-                </text>
-             ) : null;
-          }}
-        >
-          {chartData.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-          ))}
-        </Pie>
+      <BarChart data={chartData} margin={{ top: 5, right: 20, left: -10, bottom: 50 }}>
+        <XAxis 
+            dataKey="name"
+            tickLine={false}
+            axisLine={false}
+            interval={0}
+            tick={<CustomizedAxisTick />}
+        />
+        <YAxis 
+            stroke="#64748b"
+            fontSize={12}
+            tickLine={false}
+            axisLine={false}
+            tickFormatter={(value) => `₹${new Intl.NumberFormat('en-IN', { notation: 'compact', compactDisplay: 'short' }).format(value as number)}`} 
+        />
         <Tooltip
             formatter={(value: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value)}
             contentStyle={{
@@ -73,9 +80,22 @@ const CategoryExpenseChart: React.FC<CategoryExpenseChartProps> = ({ transaction
                 border: '1px solid #e2e8f0',
                 borderRadius: '0.5rem',
             }}
+            labelStyle={{ color: '#334155' }}
+            cursor={{ fill: 'rgba(100, 116, 139, 0.1)'}}
         />
-        <Legend iconSize={10} wrapperStyle={{fontSize: "12px", paddingTop: "10px", lineHeight: '20px'}}/>
-      </PieChart>
+        <Bar dataKey="value" name="Expense" onClick={(data) => onSliceClick(data.name)} radius={[4, 4, 0, 0]}>
+          {chartData.map((entry, index) => (
+            <Cell 
+                key={`cell-${index}`}
+                fill={COLORS[index % COLORS.length]} 
+                fillOpacity={!selectedCategory || selectedCategory === entry.name ? 1 : 0.3}
+                stroke={selectedCategory === entry.name ? '#334155' : 'none'}
+                strokeWidth={2}
+                className="cursor-pointer transition-opacity"
+            />
+          ))}
+        </Bar>
+      </BarChart>
     </ResponsiveContainer>
   );
 };

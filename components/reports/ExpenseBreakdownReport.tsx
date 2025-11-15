@@ -14,8 +14,6 @@ const ExpenseBreakdownReport: React.FC<ExpenseBreakdownReportProps> = ({ transac
         const today = new Date();
         const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
         const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        // This function formats a date to 'YYYY-MM-DD' in the local timezone,
-        // avoiding the conversion issues of toISOString().
         const formatDate = (date: Date) => {
             const year = date.getFullYear();
             const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -29,11 +27,15 @@ const ExpenseBreakdownReport: React.FC<ExpenseBreakdownReportProps> = ({ transac
     };
 
     const [filters, setFilters] = useState({ startDate: getMonthDateRange().startDate, endDate: getMonthDateRange().endDate });
-    const [itemSearchTerm, setItemSearchTerm] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
     const handleFilterChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
         setFilters(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleCategorySelect = (category: string) => {
+      setSelectedCategory(prev => (prev === category ? null : category));
     };
 
     const filteredTransactions = useMemo(() => {
@@ -52,38 +54,46 @@ const ExpenseBreakdownReport: React.FC<ExpenseBreakdownReportProps> = ({ transac
         return filteredTransactions.reduce((total, t) => total + calculateTotalAmount(t.items), 0);
     }, [filteredTransactions]);
 
-    const searchedItemTotal = useMemo(() => {
-        if (!itemSearchTerm.trim()) {
-            return null;
-        }
-        const lowercasedSearch = itemSearchTerm.toLowerCase();
-        let total = 0;
-        filteredTransactions.forEach(t => {
+    const { topItems, selectedCategoryTotal } = useMemo(() => {
+        const sourceTransactions = selectedCategory
+            ? filteredTransactions.filter(t => t.category === selectedCategory)
+            : filteredTransactions;
+
+        const aggregatedItems: { [key: string]: { name: string; value: number } } = {};
+        
+        sourceTransactions.forEach(t => {
             t.items.forEach(item => {
-                if (item.description.toLowerCase().includes(lowercasedSearch)) {
-                    total += item.quantity * item.unitPrice;
+                const description = item.description.trim();
+                if (!description) return; // Skip items with no/empty description
+
+                const total = item.quantity * item.unitPrice;
+                const normalizedDescription = description.toLowerCase();
+
+                if (aggregatedItems[normalizedDescription]) {
+                    aggregatedItems[normalizedDescription].value += total;
+                } else {
+                    // Store the first-seen casing of the description for display
+                    aggregatedItems[normalizedDescription] = {
+                        name: description,
+                        value: total,
+                    };
                 }
             });
         });
-        return total;
-    }, [filteredTransactions, itemSearchTerm]);
+        
+        const currentTotal = sourceTransactions.reduce((acc, t) => acc + calculateTotalAmount(t.items), 0);
 
-    const topItems = useMemo(() => {
-        const itemTotals: { [key: string]: number } = {};
-        filteredTransactions.forEach(t => {
-            t.items.forEach(item => {
-                const total = item.quantity * item.unitPrice;
-                itemTotals[item.description] = (itemTotals[item.description] || 0) + total;
-            });
-        });
-
-        return Object.entries(itemTotals)
-            .map(([name, value]) => ({ name, value }))
+        const sortedItems = Object.values(aggregatedItems)
             .sort((a, b) => b.value - a.value)
             .slice(0, 10);
-    }, [filteredTransactions]);
+        
+        return { topItems: sortedItems, selectedCategoryTotal: currentTotal };
+    }, [filteredTransactions, selectedCategory]);
+
 
     const formatCurrency = (value: number) => value.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+
+    const maxItemValue = topItems.length > 0 ? topItems[0].value : 1;
 
     return (
         <div className="space-y-6">
@@ -109,40 +119,54 @@ const ExpenseBreakdownReport: React.FC<ExpenseBreakdownReportProps> = ({ transac
             {filteredTransactions.length > 0 ? (
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
                     <div className="lg:col-span-3 bg-white p-6 rounded-xl shadow-md">
-                        <h3 className="text-xl font-semibold mb-4 text-brand-dark">Top Items by Expense</h3>
-                        <div className="mb-4">
-                            <input
-                                type="text"
-                                placeholder="Search for item total..."
-                                value={itemSearchTerm}
-                                onChange={e => setItemSearchTerm(e.target.value)}
-                                className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary"
-                            />
-                            {searchedItemTotal !== null && (
-                                <p className="mt-2 text-sm text-brand-secondary">
-                                    Total for items matching <span className="font-semibold text-brand-dark">"{itemSearchTerm}"</span>: 
-                                    <span className="font-bold text-brand-dark ml-2">{formatCurrency(searchedItemTotal)}</span>
+                         <div className="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 className="text-xl font-semibold text-brand-dark">
+                                   {selectedCategory ? `Top Items in "${selectedCategory}"` : 'Top Items by Expense'}
+                                </h3>
+                                 <p className="text-sm text-brand-secondary">
+                                   Total: <span className="font-bold">{formatCurrency(selectedCategory ? selectedCategoryTotal : totalExpenses)}</span>
                                 </p>
+                            </div>
+                            {selectedCategory && (
+                                <button onClick={() => setSelectedCategory(null)} className="text-xs font-semibold text-brand-primary hover:underline flex-shrink-0 ml-2">
+                                    Clear Filter
+                                </button>
                             )}
                         </div>
-                        <ul className="space-y-2">
-                            {topItems.map(item => (
-                                <li key={item.name} className="flex justify-between items-center text-sm p-2 bg-gray-50 rounded-md">
-                                    <span className="font-medium text-brand-dark truncate pr-4">{item.name}</span>
-                                    <span className="font-semibold text-red-500 flex-shrink-0">{formatCurrency(item.value)}</span>
-                                </li>
-                            ))}
-                        </ul>
-                         <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between font-bold text-brand-dark">
-                            <span>Total Period Expenses</span>
-                            <span>{formatCurrency(totalExpenses)}</span>
-                        </div>
+                        {topItems.length > 0 ? (
+                            <ul className="space-y-4">
+                                {topItems.map(item => (
+                                    <li key={item.name}>
+                                        <div className="flex justify-between items-center text-sm mb-1">
+                                            <span className="font-medium text-brand-dark truncate pr-4">{item.name}</span>
+                                            <span className="font-semibold text-red-500 flex-shrink-0">{formatCurrency(item.value)}</span>
+                                        </div>
+                                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                            <div
+                                                className="bg-red-400 h-1.5 rounded-full"
+                                                style={{ width: `${(item.value / maxItemValue) * 100}%` }}
+                                                title={`${formatCurrency(item.value)}`}
+                                            ></div>
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-sm text-brand-secondary text-center py-8">
+                                No items found for this {selectedCategory ? 'category' : 'period'}.
+                            </p>
+                        )}
                     </div>
                     <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-md">
                         <h3 className="text-xl font-semibold text-brand-dark">Expenses by Category</h3>
                         <p className="text-sm text-brand-secondary mb-4">Total: <span className="font-bold">{formatCurrency(totalExpenses)}</span></p>
                         <div className="h-80">
-                            <CategoryExpenseChart transactions={filteredTransactions} />
+                            <CategoryExpenseChart 
+                                transactions={filteredTransactions}
+                                onSliceClick={handleCategorySelect}
+                                selectedCategory={selectedCategory}
+                            />
                         </div>
                     </div>
                 </div>

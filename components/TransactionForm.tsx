@@ -25,17 +25,17 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
     const day = today.getDate().toString().padStart(2, '0');
     return `${year}-${month}-${day}`;
   });
-  const [category, setCategory] = useState(categories[0]);
+  const [category, setCategory] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Online');
   const [items, setItems] = useState<ItemState[]>([{ description: '', quantity: '1', unitPrice: '' }]);
   const [isScanning, setIsScanning] = useState(false);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
-  // When categories list updates (e.g., new category added), ensure `category` state is valid
+  // When categories list updates (e.g., deleted category), ensure `category` state is valid
   useEffect(() => {
-    if (!categories.includes(category)) {
-      setCategory(categories[0] || '');
+    if (category && !categories.includes(category)) {
+      setCategory('');
     }
   }, [categories, category]);
   
@@ -71,6 +71,11 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
       return;
     }
 
+    if (type === 'expense' && !category) {
+      alert('Please select a category for the expense.');
+      return;
+    }
+
     const finalItems = items.map(item => ({
       id: '', // will be set in App.tsx
       description: item.description,
@@ -99,7 +104,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
         const day = today.getDate().toString().padStart(2, '0');
         return `${year}-${month}-${day}`;
     });
-    setCategory(categories[0]);
+    setCategory('');
     setPaymentMethod('Online');
     setItems([{ description: '', quantity: '1', unitPrice: '' }]);
   };
@@ -262,6 +267,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
                 <div>
                   <label htmlFor="category" className="block text-sm font-medium text-brand-secondary mb-1">Category</label>
                   <select id="category" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary">
+                    <option value="" disabled>Select a category</option>
                     {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                   </select>
                 </div>
