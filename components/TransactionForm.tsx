@@ -138,7 +138,7 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, onCancel, c
         <h2 className="text-md font-extrabold text-brand-dark dark:text-white uppercase tracking-wider">
           New {type}
         </h2>
-        <button onClick={() => handleSubmit()} className="text-emerald-500 font-extrabold text-sm uppercase tracking-widest hover:text-emerald-600">
+        <button type="button" onClick={(e) => handleSubmit(e)} className="text-emerald-500 font-extrabold text-sm uppercase tracking-widest hover:text-emerald-600">
           SAVE
         </button>
       </div>
@@ -213,9 +213,9 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, onCancel, c
                     <select 
                         value={category} 
                         onChange={(e) => setCategory(e.target.value)} 
-                        className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 rounded-xl p-4 text-sm font-bold outline-none text-brand-dark dark:text-white appearance-none"
+                        className={`w-full bg-slate-50 dark:bg-slate-950 border rounded-xl p-4 text-sm font-bold outline-none appearance-none transition-colors ${!category ? 'border-red-300 dark:border-red-900 text-slate-400' : 'border-slate-100 dark:border-slate-800 text-brand-dark dark:text-white'}`}
                     >
-                        <option value="">Select Category</option>
+                        <option value="">Select Category (Required)</option>
                         {categories.map(c => <option key={c} value={c}>{c}</option>)}
                     </select>
                 </div>
@@ -342,7 +342,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, onCancel, c
       {/* Sticky Bottom Action Bar */}
       <div className="fixed bottom-0 left-0 right-0 p-5 bg-white/80 dark:bg-slate-950/80 backdrop-blur-md border-t border-slate-100 dark:border-slate-900 z-30">
           <button 
-            onClick={() => handleSubmit()}
+            type="button"
+            onClick={(e) => handleSubmit(e)}
             className="w-full py-4 bg-brand-dark dark:bg-brand-primary text-white rounded-xl font-black text-xs uppercase tracking-[0.2em] shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>

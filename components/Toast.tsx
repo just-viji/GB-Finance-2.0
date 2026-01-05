@@ -22,9 +22,9 @@ const Toast: React.FC<ToastProps> = ({ isVisible, message, type = 'success', onC
   
   if (!show) return null;
 
-  // Added z-[100] to ensure it is above modals and navigation
+  // Added z-[200] to ensure it is above modals (z-[150]) and navigation
   // Changed bottom-5 to bottom-24 (mobile) and sm:bottom-8 (desktop) to clear the navbar
-  const baseClasses = "fixed bottom-24 right-5 left-5 sm:left-auto sm:bottom-8 sm:right-8 w-auto sm:max-w-xs p-4 rounded-lg shadow-2xl text-white text-sm font-semibold flex items-center gap-3 z-[100] transform transition-all duration-300";
+  const baseClasses = "fixed bottom-24 right-5 left-5 sm:left-auto sm:bottom-8 sm:right-8 w-auto sm:max-w-xs p-4 rounded-lg shadow-2xl text-white text-sm font-semibold flex items-center gap-3 z-[200] transform transition-all duration-300";
   const typeClasses = {
     success: "bg-brand-primary",
     error: "bg-brand-accent",
