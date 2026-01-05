@@ -47,7 +47,7 @@ const MandatoryUpdateOverlay: React.FC<{ release: AppRelease }> = ({ release }) 
                 <p className="text-sm text-gray-500 dark:text-slate-400 mt-2">A mandatory update (v{release.version}) is required to continue using the finance hub.</p>
             </div>
             <button 
-                onClick={() => window.open(release.download_url, '_blank')}
+                onClick={() => window.open(release.download_url, '_system')}
                 className="w-full py-4 bg-brand-dark dark:bg-brand-primary text-white font-black rounded-lg shadow-lg hover:bg-slate-800 dark:hover:bg-brand-primary-hover transition-all active:scale-95 flex items-center justify-center gap-2 uppercase tracking-widest text-xs"
             >
                 Get Update Now

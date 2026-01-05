@@ -310,7 +310,21 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, onCancel, c
                     <h4 className="text-[11px] font-black text-brand-dark dark:text-white uppercase tracking-widest group-hover:text-brand-primary transition-colors">Scan Bill</h4>
                     <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Auto-fill via AI (Switches to Advanced)</p>
                 </div>
-                <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={(e) => e.target.files?.[0] && handleScan(e.target.files[0])} />
+                {/* Changed from className="hidden" to opacity-0 to work in WebViews */}
+                <input 
+                    type="file" 
+                    ref={cameraInputRef} 
+                    className="absolute opacity-0 w-0 h-0 overflow-hidden" 
+                    accept="image/*" 
+                    capture="environment" 
+                    onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                            handleScan(e.target.files[0]);
+                        }
+                        // Reset value to allow re-selection
+                        e.target.value = '';
+                    }} 
+                />
                 
                 {isScanning && (
                     <div className="absolute inset-0 bg-white/90 dark:bg-slate-900/90 flex items-center justify-center gap-3">

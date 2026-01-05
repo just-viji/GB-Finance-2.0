@@ -238,7 +238,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                             <p className="text-xs font-bold text-green-700">New Version Available</p>
                             <p className="text-[10px] text-green-600">Build v{latestRelease.version}</p>
                         </div>
-                        <button onClick={() => window.open(latestRelease.download_url, '_blank')} className="px-4 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg">Update</button>
+                        <button onClick={() => window.open(latestRelease.download_url, '_system')} className="px-4 py-1.5 bg-green-600 text-white text-xs font-bold rounded-lg">Update</button>
                     </div>
                 )}
             </div>
