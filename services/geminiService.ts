@@ -7,6 +7,57 @@ export type ScannedItem = Omit<TransactionLineItem, 'id'>;
 declare var Tesseract: any;
 
 /**
+ * Compresses and resizes an image file to ensure it fits within payload limits and WebView memory.
+ * Converts to JPEG with 0.7 quality and max dimension of 1024px.
+ */
+export async function compressImage(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const elem = document.createElement('canvas');
+        const maxWidth = 1024;
+        const maxHeight = 1024;
+        let width = img.width;
+        let height = img.height;
+
+        // Calculate new dimensions
+        if (width > height) {
+          if (width > maxWidth) {
+            height *= maxWidth / width;
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width *= maxHeight / height;
+            height = maxHeight;
+          }
+        }
+
+        elem.width = width;
+        elem.height = height;
+        const ctx = elem.getContext('2d');
+        if (!ctx) {
+            reject(new Error("Could not get canvas context"));
+            return;
+        }
+        ctx.drawImage(img, 0, 0, width, height);
+        
+        // Compress to JPEG at 0.7 quality
+        const dataUrl = elem.toDataURL('image/jpeg', 0.7);
+        // Remove the Data URL prefix to get raw base64
+        resolve(dataUrl.split(',')[1]);
+      };
+      img.onerror = (error) => reject(error);
+    };
+    reader.onerror = (error) => reject(error);
+  });
+}
+
+/**
  * Local OCR fallback using Tesseract.js
  */
 export async function scanBillLocally(base64ImageData: string): Promise<ScannedItem[]> {
@@ -174,15 +225,7 @@ Data Summary: ${JSON.stringify(transactions.slice(0, 30).map(t => ({
   }
 }
 
+// Kept for backward compatibility if needed, but implementation uses the new structure logic
 export function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const result = reader.result as string;
-      const base64String = result.split(',')[1];
-      resolve(base64String);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(blob);
-  });
+  return compressImage(blob as File);
 }

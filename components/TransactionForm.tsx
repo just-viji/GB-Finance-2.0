@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Transaction, TransactionType, PaymentMethod, TransactionLineItem } from '../types';
 import { PAYMENT_METHODS } from '../constants';
-import { scanBillWithGemini, blobToBase64 } from '../services/geminiService';
+import { scanBillWithGemini, compressImage } from '../services/geminiService';
 
 interface TransactionFormProps {
   onSubmit: (transaction: Omit<Transaction, 'id'>) => void;
@@ -61,7 +61,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, onCancel, c
     setIsScanning(true);
     showToast("Analyzing bill with AI...", "success");
     try {
-      const base64 = await blobToBase64(file);
+      // Use compressImage to ensure file size is manageable for mobile networks/memory
+      const base64 = await compressImage(file);
       const scannedItems = await scanBillWithGemini(base64);
       
       if (scannedItems && scannedItems.length > 0) {
@@ -79,7 +80,8 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, onCancel, c
         showToast("AI couldn't find items. Using simple mode.", "error");
       }
     } catch (error: any) {
-        showToast("Scanning failed.", "error");
+        console.error(error);
+        showToast("Scanning failed. Try a clearer photo.", "error");
     } finally {
       setIsScanning(false);
     }
