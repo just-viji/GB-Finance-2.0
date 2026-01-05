@@ -90,7 +90,7 @@ export async function scanBillWithGemini(base64ImageData: string): Promise<Scann
       },
     };
     const textPart = {
-      text: "Analyze this receipt image. Extract all line items as a JSON list. For each item, provide 'description' (string), 'quantity' (number), and 'unitPrice' (number). Ensure it returns strictly JSON."
+      text: "Analyze this bill/receipt image. Extract all individual line items. For each item, provide: 1. 'description' (string, e.g. 'Coffee'), 2. 'quantity' (number, e.g. 2), 3. 'unitPrice' (number, the price per single item). Do not include taxes or totals as items. If unit price isn't clear, use total price for that item with quantity 1. Return strictly JSON."
     };
     
     const response = await ai.models.generateContent({
@@ -120,20 +120,21 @@ export async function scanBillWithGemini(base64ImageData: string): Promise<Scann
     });
 
     const jsonText = response.text;
-    if (!jsonText) throw new Error("Empty AI response");
+    if (!jsonText) throw new Error("AI returned empty content");
     
     const result = JSON.parse(jsonText);
     return result.items || [];
   } catch (error: any) {
     console.error('Gemini Scanning Error:', error);
-    if (error.message?.includes("Requested entity was not found")) {
-        throw new Error("API_KEY_INVALID");
+    if (error.message?.includes("API_KEY_INVALID") || error.message?.includes("API_KEY_MISSING")) {
+        throw error;
     }
-    throw error;
+    // Fallback to local OCR if Gemini fails for reasons other than API Key
+    console.log("Attempting local OCR fallback...");
+    return scanBillLocally(base64ImageData);
   }
 }
 
-// Fix: Implemented getChatbotResponse to handle AI financial assistance queries.
 /**
  * Chatbot assistant using Gemini 3 Flash
  */
@@ -144,13 +145,11 @@ export async function getChatbotResponse(history: any[], transactions: any[]): P
   try {
     const ai = new GoogleGenAI({ apiKey });
     
-    // Extract system instruction if it was passed in the history
     const systemPart = history.find(h => h.role === 'system');
     const messages = history.filter(h => h.role !== 'system');
 
-    // Summarize transactions to save tokens and provide context
     const context = `Context: User has ${transactions.length} transactions recorded. 
-Latest Data Summary: ${JSON.stringify(transactions.slice(0, 50).map(t => ({
+Data Summary: ${JSON.stringify(transactions.slice(0, 30).map(t => ({
         d: t.description,
         c: t.category,
         dt: t.date,
@@ -164,17 +163,14 @@ Latest Data Summary: ${JSON.stringify(transactions.slice(0, 50).map(t => ({
         ...messages
       ],
       config: {
-        systemInstruction: systemPart?.parts[0]?.text || "You are a friendly financial assistant for the GB Finance app."
+        systemInstruction: systemPart?.parts[0]?.text || "You are a friendly financial assistant."
       }
     });
 
     return response.text || "I'm sorry, I couldn't generate a response.";
   } catch (error: any) {
     console.error('Gemini Chat Error:', error);
-    if (error.message?.includes("Requested entity was not found")) {
-        throw new Error("API_KEY_INVALID");
-    }
-    return "Something went wrong with the AI service. Please check your connection or API key.";
+    return "Something went wrong with the AI service.";
   }
 }
 

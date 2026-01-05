@@ -2,7 +2,6 @@
 import React, { useRef, useState, useMemo } from 'react';
 import CategoryManager from '../components/CategoryManager';
 import ProfileManager from '../components/ProfileManager';
-import ApiKeyManager from '../components/ApiKeyManager';
 import ConfirmDeleteAccount from '../components/ConfirmDeleteAccount';
 import { exportTransactionsToCSV } from '../utils/transactionUtils';
 import { Transaction, AppRelease } from '../types';
@@ -150,12 +149,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
                 
                 <div className="space-y-4">
                     <div className="p-4 border border-slate-100 dark:border-slate-800 rounded-xl">
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">AI Service Integration</label>
-                        <ApiKeyManager />
-                    </div>
-
-                    <div className="p-4 border border-slate-100 dark:border-slate-800 rounded-xl">
-                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Change Password</label>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Credentials & Security</label>
                         <ProfileManager />
                     </div>
                     <button onClick={onLogout} className="w-full py-3 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold rounded-xl active:scale-95 transition-all">Sign Out</button>
@@ -280,9 +274,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
 
   return (
     <div className="max-w-md mx-auto h-[calc(100dvh-4.5rem-var(--sat,0px)-4rem)] flex flex-col bg-white dark:bg-slate-950 overflow-hidden border-x border-slate-100 dark:border-slate-900">
-      {/* 
-        Simplified Header
-      */}
       <header className="sticky top-0 z-40 bg-white dark:bg-slate-950 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
         <div className="flex items-center px-4 h-14">
             <button 
@@ -314,9 +305,6 @@ const SettingsPage: React.FC<SettingsPageProps> = ({
         )}
       </header>
 
-      {/* 
-        Content Area
-      */}
       <div className="flex-grow overflow-y-auto no-scrollbar bg-slate-50/50 dark:bg-slate-950">
         {activeSubView === 'menu' ? (
           <div className="animate-fade-in pb-10">

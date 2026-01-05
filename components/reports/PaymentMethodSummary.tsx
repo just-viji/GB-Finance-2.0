@@ -36,14 +36,14 @@ const PaymentMethodSummary: React.FC<PaymentMethodSummaryProps> = ({ transaction
         <div>
             <p className="text-[9px] font-black text-slate-300 dark:text-slate-700 uppercase tracking-widest mb-1">Cash Ledger</p>
             <div className="divide-y divide-slate-50 dark:divide-slate-800">
-                <SummaryItem title="Cash In (Sales)" amount={summary.cashIn} isIncome={true} />
+                <SummaryItem title="Cash In (Income)" amount={summary.cashIn} isIncome={true} />
                 <SummaryItem title="Cash Out (Exp)" amount={summary.cashOut} isIncome={false} />
             </div>
         </div>
         <div>
             <p className="text-[9px] font-black text-slate-300 dark:text-slate-700 uppercase tracking-widest mb-1">Digital Ledger</p>
             <div className="divide-y divide-slate-50 dark:divide-slate-800">
-                <SummaryItem title="Bank In (Sales)" amount={summary.bankIn} isIncome={true} />
+                <SummaryItem title="Bank In (Income)" amount={summary.bankIn} isIncome={true} />
                 <SummaryItem title="Bank Out (Exp)" amount={summary.bankOut} isIncome={false} />
             </div>
         </div>

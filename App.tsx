@@ -2,7 +2,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { loadData, saveTransactions, saveCategories, clearAllData as clearAllDataFromDB, onAuthStateChange, signOut } from './services/supabase';
 import { Transaction, TransactionType, AppRelease } from './types';
-// Fix: Added missing importTransactionsFromCSV to the imports from transactionUtils.
 import { calculateTotalAmount, importTransactionsFromCSV } from './utils/transactionUtils';
 import { APP_VERSION } from './constants';
 import BottomNav from './components/SideNav';
@@ -376,10 +375,10 @@ export default function App() {
     setSelectedTransaction(transaction);
   }
 
-  const handleAddTransactionClick = (initialType?: TransactionType, autoScan = false) => {
+  const handleAddTransactionClick = (initialType?: TransactionType, autoScan?: boolean) => {
     setModalProps({
       isOpen: true,
-      title: autoScan ? 'Optical Receipt Scanner' : 'New Financial Entry',
+      title: 'New Financial Entry',
       hideFooter: true,
       fullPage: true,
       children: (
