@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Page } from '../App';
 
@@ -17,23 +18,21 @@ const NavItem: React.FC<{
     return (
         <button
             onClick={() => setCurrentPage(page)}
-            className={`flex flex-col items-center justify-center w-full pt-2 pb-1 transition-colors duration-200 ${
-                isActive
-                    ? 'text-brand-primary'
-                    : 'text-brand-secondary hover:text-brand-primary'
+            className={`flex-1 flex flex-col items-center justify-center py-2 transition-colors relative ${
+                isActive ? 'text-brand-primary dark:text-blue-400' : 'text-gray-500 dark:text-slate-500 hover:text-gray-700 dark:hover:text-slate-300'
             }`}
         >
-            {icon}
-            <span className="text-xs font-medium mt-1">{label}</span>
+            <div className="mb-0.5">{icon}</div>
+            <span className="text-[10px] font-medium">{label}</span>
+            {isActive && <div className="absolute top-0 w-8 h-1 bg-brand-primary dark:bg-blue-400 rounded-b-full"></div>}
         </button>
     );
 };
 
-
 const BottomNav: React.FC<BottomNavProps> = ({ currentPage, setCurrentPage }) => {
     return (
-        <nav className="fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-gray-200 shadow-md md:max-w-md md:mx-auto md:bottom-4 md:rounded-xl">
-            <div className="flex justify-around items-center h-16">
+        <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-800 z-[100] pb-safe">
+            <nav className="max-w-7xl mx-auto flex h-16 relative">
                 <NavItem
                     page="home"
                     currentPage={currentPage}
@@ -45,7 +44,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ currentPage, setCurrentPage }) =>
                     page="transactions"
                     currentPage={currentPage}
                     setCurrentPage={setCurrentPage}
-                    label="Transactions"
+                    label="Log"
                     icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>}
                 />
                  <NavItem
@@ -62,8 +61,8 @@ const BottomNav: React.FC<BottomNavProps> = ({ currentPage, setCurrentPage }) =>
                     label="Settings"
                     icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>}
                 />
-            </div>
-        </nav>
+            </nav>
+        </div>
     );
 };
 

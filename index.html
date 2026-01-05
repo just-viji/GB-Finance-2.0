@@ -1,70 +1,107 @@
+
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-," />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>GB Finance 2.0</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0, viewport-fit=cover" />
+    <title>GB Finance 2.0 | Professional Edition</title>
     <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgdmlld0JveD0iMCAwIDE5MiAxOTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjE5MiIgaGVpZ2h0PSIxOTIiIGZpbGw9IiMxNGI4YTYiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iODAiIGZpbGw9IndoaXRlIj5HQjwvdGV4dD48L3N2Zz4=" />
-    <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgdmlld0JveD0iMCAwIDE5MiAxOTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHJlY3Qgd2lkdGg9IjE5MiIgaGVpZ2h0PSIxOTIiIGZpbGw9IiMxNGI4YTYiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iODAiIGZpbGw9IndoaXRlIj5HQjwvdGV4dD48L3N2Zz4=" />
-    <meta name="theme-color" content="#14b8a6" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0NSIgZmlsbD0iIzA1OTY2OSIgZmlsbC1vcGFjaXR5PSIwLjEiLz48cmVjdCB4PSIxNSIgeT0iMjUiIHdpZHRoPSI3MCIgaGVpZ2h0PSI1NSIgcng9IjQiIGZpbGw9IiMwRjE3MkEiLz48cmVjdCB4PSI3MCIgeT0iNDIiIHdpZHRoPSIyMiIgaGVpZ2h0PSIyMiIgcng9IjQiIGZpbGw9IiMxMEI5ODEiLz48cGF0aCBkPSJNMjggNjIgTDQ1IDQ1IEw1OCA1NSBMNzUgMzAiIHN0cm9rZT0iIzEwQjk4MSIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGZpbGw9Im5vbmUiLz48L3N2Zz4=" />
+    <link rel="apple-touch-icon" href="data:image/svg+xml;base64,PHN2ZyB2aWV3Qm94PSIwIDAgMTAwIDEwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSI1MCIgY3k9IjUwIiByPSI0NSIgZmlsbD0iIzA1OTY2OSIgZmlsbC1vcGFjaXR5PSIwLjEiLz48cmVjdCB4PSIxNSIgeT0iMjUiIHdpZHRoPSI3MCIgaGVpZ2h0PSI1NSIgcng9IjQiIGZpbGw9IiMwRjE3MkEiLz48cmVjdCB4PSI3MCIgeT0iNDIiIHdpZHRoPSIyMiIgaGVpZ2h0PSIyMiIgcng9IjQiIGZpbGw9IiMxMEI5ODEiLz48cGF0aCBkPSJNMjggNjIgTDQ1IDQ1IEw1OCA1NSBMNzUgMzAiIHN0cm9rZT0iIzEwQjk4MSIgc3Ryb2tlLXdpZHRoPSI0IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGZpbGw9Im5vbmUiLz48L3N2Zz4=" />
+    <meta name="theme-color" content="#020617" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
     <script>
+      (function() {
+        const theme = localStorage.getItem('gb-finance-theme') || 'light';
+        if (theme === 'dark') document.documentElement.classList.add('dark');
+      })();
+      
       tailwind.config = {
+        darkMode: 'class',
         theme: {
           extend: {
             fontFamily: {
               sans: ['Inter', 'sans-serif'],
+              mono: ['JetBrains Mono', 'monospace'],
             },
             colors: {
-              'brand-primary': '#14b8a6',
-              'brand-primary-hover': '#0d9488',
+              'brand-primary': '#10b981', // Professional Emerald Green
+              'brand-primary-hover': '#059669',
               'brand-secondary': '#64748b',
-              'brand-accent': '#f43f5e',
-              'brand-light': '#f8fafc',
-              'brand-dark': '#334155',
+              'brand-accent': '#e11d48',
+              'brand-light': '#ffffff',
+              'brand-dark': '#0f172a',
+              'slate-950': '#020617',
+              'logo-mint': '#7DF9CC'
             },
+            borderRadius: {
+              'custom': '8px',
+            }
           },
         },
       }
     </script>
+  <style>
+    :root {
+      --sat: env(safe-area-inset-top);
+      --sab: env(safe-area-inset-bottom);
+    }
+    body {
+      background-color: #f8fafc;
+      color: #0f172a;
+      -webkit-font-smoothing: antialiased;
+      transition: background-color 0.3s ease;
+    }
+    .dark body {
+      background-color: #020617;
+      color: #f8fafc;
+    }
+    .premium-card {
+      background: white;
+      border: 1px solid rgba(226, 232, 240, 0.8);
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+    .dark .premium-card {
+      background: #0f172a;
+      border: 1px solid rgba(30, 41, 59, 0.8);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+    }
+    input, select {
+      border-radius: 6px !important;
+    }
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+    .animate-fade-in { animation: fade-in 0.2s ease-out; }
+    .pt-safe { padding-top: var(--sat); }
+    .pb-safe { padding-bottom: var(--sab); }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    
+    /* Screenshot-matched shadow for the central area */
+    .screenshot-frame {
+        box-shadow: 0 0 40px rgba(59, 130, 246, 0.15);
+    }
+    .dark .screenshot-frame {
+        box-shadow: 0 0 60px rgba(16, 185, 129, 0.1);
+    }
+  </style>
   <script type="importmap">
 {
   "imports": {
-    "react/": "https://aistudiocdn.com/react@^19.2.0/",
-    "react": "https://aistudiocdn.com/react@^19.2.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
-    "recharts": "https://aistudiocdn.com/recharts@^3.3.0",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.28.0",
-    "@supabase/supabase-js": "https://aistudiocdn.com/@supabase/supabase-js@^2.45.0"
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.89.0"
   }
 }
 </script>
-<style>
-  .toast-enter {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  .toast-enter-active {
-    opacity: 1;
-    transform: translateY(0);
-    transition: opacity 300ms, transform 300ms;
-  }
-  .toast-exit {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  .toast-exit-active {
-    opacity: 0;
-    transform: translateY(20px);
-    transition: opacity 300ms, transform 300ms;
-  }
-</style>
 </head>
-  <body class="bg-gray-100 text-brand-dark font-sans">
+  <body class="font-sans">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>

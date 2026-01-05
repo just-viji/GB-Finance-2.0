@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { getGeminiApiKey, setGeminiApiKey, removeGeminiApiKey } from '../services/apiKeyService';
 
@@ -10,7 +11,7 @@ const ApiKeyManager: React.FC = () => {
     const key = getGeminiApiKey();
     if (key) {
       setIsKeySet(true);
-      setMaskedKey(key.slice(0, 4) + '...'.padEnd(20, '*') + key.slice(-4));
+      setMaskedKey(key.slice(0, 4) + '...'.padEnd(16, '*') + key.slice(-4));
     }
   }, []);
 
@@ -18,34 +19,31 @@ const ApiKeyManager: React.FC = () => {
     if (apiKey.trim()) {
       setGeminiApiKey(apiKey.trim());
       setIsKeySet(true);
-      setMaskedKey(apiKey.trim().slice(0, 4) + '...'.padEnd(20, '*') + apiKey.trim().slice(-4));
+      setMaskedKey(apiKey.trim().slice(0, 4) + '...'.padEnd(16, '*') + apiKey.trim().slice(-4));
       setApiKey('');
-      alert('API Key saved successfully!');
     }
   };
 
   const handleRemove = () => {
     removeGeminiApiKey();
     setIsKeySet(false);
-    alert('API Key removed.');
   };
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-md">
-      <h3 className="text-xl font-semibold text-brand-dark mb-2">Gemini AI Configuration</h3>
-      <p className="text-sm text-brand-secondary mb-4">
-        To use the AI bill scanning feature, you need to provide your own Google Gemini API key. 
-        You can get a free key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-brand-primary underline">Google AI Studio</a>.
-      </p>
-
+    <div className="space-y-4">
       {isKeySet ? (
-        <div className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
-          <p className="text-sm font-mono text-brand-dark">{maskedKey}</p>
+        <div className="flex items-center justify-between bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800 p-3 rounded-xl">
+          <div className="flex items-center gap-3 overflow-hidden">
+             <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg text-emerald-600">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>
+             </div>
+             <p className="text-[10px] font-mono font-bold text-slate-600 dark:text-slate-400 truncate tracking-widest">{maskedKey}</p>
+          </div>
           <button
             onClick={handleRemove}
-            className="px-4 py-2 text-sm rounded-md font-semibold bg-red-100 text-red-700 hover:bg-red-200"
+            className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
           >
-            Remove Key
+            Revoke
           </button>
         </div>
       ) : (
@@ -54,19 +52,21 @@ const ApiKeyManager: React.FC = () => {
             type="password"
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
-            placeholder="Paste your Gemini API key here"
-            className="flex-grow w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary"
-            aria-label="Gemini API Key"
+            placeholder="Vertex/Gemini API Provision Key"
+            className="flex-grow bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 text-slate-900 dark:text-white rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-brand-primary/20 focus:border-brand-primary outline-none transition-all placeholder-slate-400"
           />
           <button
             onClick={handleSave}
-            className="px-4 py-2 bg-brand-primary text-white rounded-md font-semibold hover:bg-brand-primary-hover disabled:bg-gray-400"
             disabled={!apiKey.trim()}
+            className="px-6 py-3 bg-brand-dark dark:bg-brand-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest disabled:opacity-50 transition-all active:scale-95 shadow-sm"
           >
-            Save
+            Link
           </button>
         </div>
       )}
+      <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider ml-1">
+        Credentials sourced from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-brand-primary border-b border-brand-primary/30">Google Cloud Console</a>
+      </p>
     </div>
   );
 };

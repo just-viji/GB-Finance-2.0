@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Transaction } from '../types';
 import { PAYMENT_METHODS } from '../constants';
@@ -16,8 +17,6 @@ const TransactionLogReport: React.FC<TransactionLogReportProps> = ({ transaction
     const today = new Date();
     const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
     const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-    // This function formats a date to 'YYYY-MM-DD' in the local timezone,
-    // avoiding the conversion issues of toISOString().
     const formatDate = (date: Date) => {
         const year = date.getFullYear();
         const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -72,127 +71,136 @@ const TransactionLogReport: React.FC<TransactionLogReportProps> = ({ transaction
   const summary = useMemo(() => {
     return filteredTransactions.reduce((acc, t) => {
         const totalAmount = calculateTotalAmount(t.items);
-        if(t.type === 'sale') acc.sales += totalAmount;
+        if(t.type === 'income') acc.income += totalAmount;
         if(t.type === 'expense') acc.expenses += totalAmount;
         return acc;
-    }, {sales: 0, expenses: 0})
+    }, {income: 0, expenses: 0})
   }, [filteredTransactions]);
 
   const formatCurrency = (value: number) => value.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 
   return (
-    <div className="space-y-6">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm font-semibold text-brand-secondary hover:text-brand-dark">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-            Back to Reports
-        </button>
-        <h2 className="text-2xl font-bold text-brand-dark">Transaction Log</h2>
-        
-      <div className="bg-white p-4 md:p-6 rounded-xl shadow-md">
-        <h3 className="text-xl font-semibold mb-4 text-brand-dark">Filter Transactions</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
-            <input 
-              type="text" 
-              name="searchTerm" 
-              placeholder="Search by description..." 
-              value={filters.searchTerm} 
-              onChange={handleFilterChange} 
-              className="sm:col-span-4 w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary"
-            />
-            <button 
-              onClick={() => setIsAdvancedFilterOpen(!isAdvancedFilterOpen)} 
-              aria-expanded={isAdvancedFilterOpen}
-              aria-controls="advanced-filters"
-              className={`sm:col-span-1 w-full flex items-center justify-center gap-2 text-brand-secondary font-semibold p-2 rounded-md transition-colors ${isAdvancedFilterOpen ? 'bg-brand-primary/10 text-brand-primary' : 'bg-gray-100 hover:bg-gray-200'}`}
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM15 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" /></svg>
-              <span>Filters</span>
-              <svg xmlns="http://www.w3.org/2000/svg" className={`h-4 w-4 transition-transform duration-300 ${isAdvancedFilterOpen ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-            </button>
-        </div>
-        <div id="advanced-filters" className={`transition-all duration-300 ease-in-out overflow-hidden ${isAdvancedFilterOpen ? 'max-h-96 pt-4' : 'max-h-0'}`}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 border-t border-gray-200 pt-4">
-                <div>
-                    <label htmlFor="filter-type" className="text-xs font-medium text-gray-500">Type</label>
-                    <select id="filter-type" name="type" value={filters.type} onChange={handleFilterChange} className="mt-1 block w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary">
-                        <option value="all">All Types</option>
-                        <option value="sale">Sale</option>
-                        <option value="expense">Expense</option>
-                    </select>
-                </div>
-                <div>
-                    <label htmlFor="filter-category" className="text-xs font-medium text-gray-500">Category</label>
-                    <select id="filter-category" name="category" value={filters.category} onChange={handleFilterChange} className="mt-1 block w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary">
-                        <option value="all">All Categories</option>
-                        {categories.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                </div>
-                <div>
-                    <label htmlFor="filter-payment" className="text-xs font-medium text-gray-500">Payment</label>
-                    <select id="filter-payment" name="paymentMethod" value={filters.paymentMethod} onChange={handleFilterChange} className="mt-1 block w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary">
-                        <option value="all">All Methods</option>
-                        {PAYMENT_METHODS.map(p => <option key={p} value={p}>{p}</option>)}
-                    </select>
-                </div>
-                <div>
-                    <label htmlFor="filter-startdate" className="text-xs font-medium text-gray-500">Start Date</label>
-                    <input id="filter-startdate" type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} className="mt-1 block w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary"/>
-                </div>
-                <div>
-                    <label htmlFor="filter-enddate" className="text-xs font-medium text-gray-500">End Date</label>
-                    <input id="filter-enddate" type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} className="mt-1 block w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary"/>
-                </div>
+    <div className="max-w-md mx-auto h-[calc(100dvh-4.5rem-var(--sat,0px)-4rem)] flex flex-col bg-white dark:bg-slate-950 overflow-hidden border-x border-slate-100 dark:border-slate-900">
+        <header className="sticky top-0 z-40 bg-white dark:bg-slate-950 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
+            <div className="flex items-center px-4 h-14">
+                <button onClick={onBack} className="p-2 -ml-2 text-slate-900 dark:text-white">
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <h1 className="flex-grow text-center font-bold text-slate-900 dark:text-white mr-8">Transaction Log</h1>
             </div>
-        </div>
-      </div>
-       <div className="bg-white p-6 rounded-xl shadow-md">
-            <h3 className="text-xl font-semibold mb-4 text-brand-dark">Report Summary</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
-                <div>
-                    <p className="text-brand-secondary">Total Sales</p>
-                    <p className="text-2xl font-bold text-green-500">{formatCurrency(summary.sales)}</p>
-                </div>
-                <div>
-                    <p className="text-brand-secondary">Total Expenses</p>
-                    <p className="text-2xl font-bold text-red-500">{formatCurrency(summary.expenses)}</p>
-                </div>
-                <div>
-                    <p className="text-brand-secondary">Net Profit</p>
-                    <p className={`text-2xl font-bold ${summary.sales - summary.expenses >= 0 ? 'text-blue-500' : 'text-red-500'}`}>{formatCurrency(summary.sales - summary.expenses)}</p>
-                </div>
-            </div>
-        </div>
-      <div className="bg-white p-6 rounded-xl shadow-md">
-        <h3 className="text-xl font-semibold mb-4 text-brand-dark">Filtered Transactions ({filteredTransactions.length})</h3>
-        <div className="max-h-[60vh] overflow-y-auto pr-2">
-          {filteredTransactions.length > 0 ? (
-            <ul className="divide-y divide-gray-200">
-              {filteredTransactions.map(t => {
-                const totalAmount = calculateTotalAmount(t.items);
-                return (
-                 <li key={t.id} onClick={() => onTransactionClick(t)} className="flex items-center justify-between py-3 cursor-pointer hover:bg-gray-50 rounded-md -mx-2 px-2 transition-colors">
-                    <div className="flex items-center space-x-4 min-w-0">
-                        <div className={`w-2 h-10 rounded-full flex-shrink-0 ${t.type === 'sale' ? 'bg-green-400' : 'bg-red-400'}`}></div>
-                        <div className="truncate">
-                            <p className="font-semibold text-brand-dark truncate">{t.description}</p>
-                            <p className="text-sm text-brand-secondary truncate">{t.category} &bull; {t.paymentMethod} &bull; {new Date(t.date).toLocaleDateString()}</p>
-                        </div>
+        </header>
+
+        <div className="flex-grow overflow-y-auto no-scrollbar bg-slate-50/50 dark:bg-slate-950">
+            <div className="p-4 space-y-4">
+                <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                    <div className="relative mb-3">
+                        <input 
+                            type="text" 
+                            name="searchTerm" 
+                            placeholder="Search descriptions..." 
+                            value={filters.searchTerm} 
+                            onChange={handleFilterChange} 
+                            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white rounded-lg pl-10 pr-4 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                        />
+                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                     </div>
-                    <p className={`font-bold flex-shrink-0 ml-2 text-right ${t.type === 'sale' ? 'text-green-600' : 'text-red-600'}`}>
-                        {t.type === 'sale' ? '+' : '-'} {formatCurrency(totalAmount)}
-                    </p>
-                </li>
-              )})}
-            </ul>
-          ) : (
-            <EmptyState
-                icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" /></svg>}
-                title="No Matching Transactions"
-                message="No transactions match the current filters. Try adjusting your search."
-            />
-          )}
+                    
+                    <button 
+                        onClick={() => setIsAdvancedFilterOpen(!isAdvancedFilterOpen)}
+                        className="w-full flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest px-1"
+                    >
+                        <span>Filter Options</span>
+                        <svg className={`w-4 h-4 transition-transform ${isAdvancedFilterOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+                    </button>
+
+                    {isAdvancedFilterOpen && (
+                        <div className="pt-4 grid grid-cols-2 gap-x-3 gap-y-4 animate-fade-in">
+                            <div className="col-span-1">
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Type</label>
+                                <select name="type" value={filters.type} onChange={handleFilterChange} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs py-1.5 rounded-md outline-none">
+                                    <option value="all">All Types</option>
+                                    <option value="income">Income</option>
+                                    <option value="expense">Expense</option>
+                                </select>
+                            </div>
+                            <div className="col-span-1">
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Category</label>
+                                <select name="category" value={filters.category} onChange={handleFilterChange} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs py-1.5 rounded-md outline-none">
+                                    <option value="all">All Categories</option>
+                                    {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                                </select>
+                            </div>
+                            <div className="col-span-1">
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Method</label>
+                                <select name="paymentMethod" value={filters.paymentMethod} onChange={handleFilterChange} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs py-1.5 rounded-md outline-none">
+                                    <option value="all">All Methods</option>
+                                    {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+                                </select>
+                            </div>
+                            <div className="col-span-1">
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">Start Date</label>
+                                <input type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs py-1 rounded-md outline-none px-1" />
+                            </div>
+                            <div className="col-span-1">
+                                <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">End Date</label>
+                                <input type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs py-1 rounded-md outline-none px-1" />
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm text-center">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Income</p>
+                        <p className="text-sm font-bold text-emerald-600">{formatCurrency(summary.income)}</p>
+                    </div>
+                    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm text-center">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Expense</p>
+                        <p className="text-sm font-bold text-rose-600">{formatCurrency(summary.expenses)}</p>
+                    </div>
+                </div>
+
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+                    <div className="px-4 py-3 bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800">
+                        <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Filtered Entries ({filteredTransactions.length})</h3>
+                    </div>
+                    <div className="divide-y divide-slate-50 dark:divide-slate-800">
+                        {filteredTransactions.length > 0 ? (
+                            filteredTransactions.map(t => {
+                                const totalAmount = calculateTotalAmount(t.items);
+                                const isIncome = t.type === 'income';
+                                return (
+                                    <button 
+                                        key={t.id} 
+                                        onClick={() => onTransactionClick(t)} 
+                                        className="w-full flex items-center justify-between p-4 active:bg-slate-50 dark:active:bg-slate-800 transition-colors text-left"
+                                    >
+                                        <div className="flex items-center gap-3 min-w-0">
+                                            <div className={`w-1 h-8 rounded-full flex-shrink-0 ${isIncome ? 'bg-emerald-500' : 'bg-rose-500'}`}></div>
+                                            <div className="truncate">
+                                                <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate">{t.description}</p>
+                                                <p className="text-[10px] text-slate-400 font-semibold uppercase">{t.category} • {t.paymentMethod} • {new Date(t.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}</p>
+                                            </div>
+                                        </div>
+                                        <p className={`text-sm font-bold shrink-0 ${isIncome ? 'text-emerald-600' : 'text-slate-900 dark:text-slate-100'}`}>
+                                            {isIncome ? '+' : ''}{formatCurrency(totalAmount)}
+                                        </p>
+                                    </button>
+                                )
+                            })
+                        ) : (
+                            <div className="py-20">
+                                <EmptyState
+                                    icon={<svg className="h-10 w-10 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" /></svg>}
+                                    title="No Matching Records"
+                                    message="Try adjusting your filters."
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
         </div>
-      </div>
     </div>
   );
 };

@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Transaction } from '../../types';
 import { calculateTotalAmount } from '../../utils/transactionUtils';
@@ -11,7 +12,7 @@ interface TransactionDetailViewProps {
 const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ transaction, onEdit, onDelete }) => {
   const { type, description, date, category, paymentMethod, items } = transaction;
   const totalAmount = calculateTotalAmount(items);
-  const isSale = type === 'sale';
+  const isIncome = type === 'income';
 
   const DetailItem: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
     <div>
@@ -25,14 +26,14 @@ const TransactionDetailView: React.FC<TransactionDetailViewProps> = ({ transacti
       <div className="bg-gray-50 p-4 rounded-lg">
         <div className="flex justify-between items-start">
           <p className="font-bold text-lg text-brand-dark pr-4">{description}</p>
-          <p className={`font-bold text-lg flex-shrink-0 ${isSale ? 'text-green-600' : 'text-red-600'}`}>
-            {isSale ? '+' : '-'} {totalAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
+          <p className={`font-bold text-lg flex-shrink-0 ${isIncome ? 'text-green-600' : 'text-red-600'}`}>
+            {isIncome ? '+' : '-'} {totalAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4 text-sm">
-        <DetailItem label="Type" value={<span className={`font-semibold px-2 py-0.5 rounded-full ${isSale ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{type.charAt(0).toUpperCase() + type.slice(1)}</span>} />
+        <DetailItem label="Type" value={<span className={`font-semibold px-2 py-0.5 rounded-full ${isIncome ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{type.charAt(0).toUpperCase() + type.slice(1)}</span>} />
         <DetailItem label="Date" value={new Date(date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })} />
         <DetailItem label="Category" value={category} />
         <DetailItem label="Payment Method" value={paymentMethod} />

@@ -1,4 +1,5 @@
-const CACHE_NAME = 'gb-finance-cache-v6';
+
+const CACHE_NAME = 'gb-finance-cache-v7';
 // Only cache essential, same-origin app shell files during installation.
 // Icons have been removed as they are now embedded data URIs.
 const urlsToCache = [

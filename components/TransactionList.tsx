@@ -1,91 +1,72 @@
-import React, { useState } from 'react';
+
+import React from 'react';
 import { Transaction } from '../types';
 import { calculateTotalAmount } from '../utils/transactionUtils';
-import EmptyState from './EmptyState';
 
-interface TransactionItemProps {
-  transaction: Transaction;
-  onTransactionClick?: (transaction: Transaction) => void;
-}
-
-const TransactionItem: React.FC<TransactionItemProps> = ({ transaction, onTransactionClick }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  const { type, description, date, category, paymentMethod, items } = transaction;
-  const totalAmount = calculateTotalAmount(items);
-  const isSale = type === 'sale';
-  const amountColor = isSale ? 'text-green-600' : 'text-red-600';
-  const sign = isSale ? '+' : '-';
-
+const TransactionItem: React.FC<{ transaction: Transaction; onTransactionClick?: (t: Transaction) => void }> = ({ transaction, onTransactionClick }) => {
+  const totalAmount = calculateTotalAmount(transaction.items);
+  const isIncome = transaction.type === 'income';
+  
   return (
-    <li 
-      className={`group bg-white rounded-lg transition-all duration-200 hover:bg-gray-50/80 shadow-sm border border-gray-200/80 p-3 ${onTransactionClick ? 'cursor-pointer' : ''}`}
-      onClick={() => onTransactionClick && onTransactionClick(transaction)}
+    <div 
+      className="group bg-white dark:bg-slate-900 border-b border-slate-50 dark:border-slate-800 last:border-0 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+      onClick={() => onTransactionClick?.(transaction)}
     >
-        <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4 min-w-0">
-                <div className={`w-2 h-10 rounded-full flex-shrink-0 ${isSale ? 'bg-green-400' : 'bg-red-400'}`}></div>
-                <div className="truncate">
-                    <p className="font-semibold text-brand-dark truncate">{description}</p>
-                    <p className="text-sm text-brand-secondary truncate">{!isSale && `${category} • `}{paymentMethod} &bull; {new Date(date).toLocaleDateString()}</p>
+        <div className="px-4 py-3.5 flex items-center gap-4">
+            {/* Simple Circle Icon */}
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${isIncome ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400' : 'bg-slate-50 text-slate-600 dark:bg-slate-800 dark:text-slate-400'}`}>
+                {isIncome ? (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+                ) : (
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4" /></svg>
+                )}
+            </div>
+            
+            <div className="flex-grow min-w-0">
+                <p className="text-sm font-bold text-slate-800 dark:text-slate-100 truncate leading-tight mb-0.5">{transaction.description}</p>
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                        {new Date(transaction.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}
+                    </span>
+                    <span className="w-1 h-1 rounded-full bg-slate-200 dark:bg-slate-700"></span>
+                    <span className="text-[10px] font-bold text-blue-500 uppercase tracking-tight">{transaction.category}</span>
                 </div>
             </div>
-            <div className="flex items-center gap-2 md:gap-4 flex-shrink-0 ml-2">
-                <p className={`font-bold text-base sm:text-lg text-right ${amountColor}`}>{sign} {totalAmount.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}</p>
-                <div className="flex gap-1">
-                    {items.length > 1 &&
-                        <button onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }} aria-label="View items" className="p-2 rounded-full hover:bg-gray-200 text-brand-secondary">
-                            <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" /></svg>
-                        </button>
-                    }
-                </div>
+            
+            <div className="text-right flex flex-col items-end">
+                <p className={`text-sm font-extrabold ${isIncome ? 'text-emerald-600' : 'text-slate-900 dark:text-slate-100'}`}>
+                    {isIncome ? '+' : ''}₹{totalAmount.toLocaleString('en-IN')}
+                </p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{transaction.paymentMethod}</p>
             </div>
         </div>
-        <div className={`transition-all duration-300 ease-in-out overflow-hidden ${isExpanded ? 'max-h-96 mt-2' : 'max-h-0'}`}>
-             {items.length > 1 && (
-                <div className="pl-6 border-l-2 border-gray-200 ml-2 pt-2">
-                    <ul className="text-sm text-brand-secondary space-y-1">
-                        {items.map(item => (
-                            <li key={item.id} className="flex justify-between">
-                                <span>{item.description} ({item.quantity} x {item.unitPrice.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })})</span>
-                                <span>{(item.quantity * item.unitPrice).toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}</span>
-                            </li>
-                        ))}
-                    </ul>
-                </div>
-            )}
-        </div>
-    </li>
+    </div>
   );
 };
 
-interface TransactionListProps {
-  transactions: Transaction[];
-  title?: string;
-  limit?: number;
-  onTransactionClick?: (transaction: Transaction) => void;
-}
-
-
-const TransactionList: React.FC<TransactionListProps> = ({ transactions, title = "Recent Transactions", limit, onTransactionClick }) => {
-  const transactionsToDisplay = limit ? transactions.slice(0, limit) : transactions;
+const TransactionList: React.FC<{ transactions: Transaction[]; title?: string; limit?: number; onTransactionClick?: (t: Transaction) => void }> = ({ transactions, title = "Transaction History", limit, onTransactionClick }) => {
+  const displayTransactions = limit ? transactions.slice(0, limit) : transactions;
 
   return (
-    <div>
-        <h3 className="text-lg font-semibold mb-2 text-brand-dark">{title}</h3>
-        {transactionsToDisplay.length > 0 ? (
-             <ul className="space-y-3">
-                {transactionsToDisplay.map(t => <TransactionItem key={t.id} transaction={t} onTransactionClick={onTransactionClick} />)}
-            </ul>
+    <div className="bg-white dark:bg-slate-900 rounded-xl overflow-hidden border border-slate-100 dark:border-slate-800 shadow-sm">
+        <div className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50/50 dark:bg-slate-800/30">
+            <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{title}</h3>
+            {limit && transactions.length > limit && (
+                <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">See More</span>
+            )}
+        </div>
+        {displayTransactions.length > 0 ? (
+             <div className="divide-y divide-slate-50 dark:divide-slate-800">
+                {displayTransactions.map(t => <TransactionItem key={t.id} transaction={t} onTransactionClick={onTransactionClick} />)}
+            </div>
         ) : (
-             <EmptyState
-                icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg>}
-                title="No Transactions Found"
-                message={limit ? "Add a new sale or expense to see it here." : "Your filtered search did not return any results."}
-            />
+             <div className="py-12 flex flex-col items-center opacity-30">
+                 <svg className="h-10 w-10 mb-3 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                 <span className="text-[10px] font-bold uppercase tracking-[0.2em]">No Ledger Entries</span>
+             </div>
         )}
     </div>
   );
 };
 
-export default TransactionList;
+export default React.memo(TransactionList);

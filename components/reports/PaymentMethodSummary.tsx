@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { Transaction } from '../../types';
 import { calculateTotalAmount } from '../../utils/transactionUtils';
@@ -6,12 +7,12 @@ interface PaymentMethodSummaryProps {
   transactions: Transaction[];
 }
 
-const SummaryCard: React.FC<{ title: string; amount: number; color: string }> = ({ title, amount, color }) => (
-    <div className="bg-gray-50 p-4 rounded-lg text-center">
-        <p className="text-sm font-medium text-brand-secondary">{title}</p>
-        <p className={`text-xl font-bold ${color}`}>
+const SummaryItem: React.FC<{ title: string; amount: number; isIncome: boolean }> = ({ title, amount, isIncome }) => (
+    <div className="flex justify-between items-center py-2">
+        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">{title}</span>
+        <span className={`text-xs font-bold ${isIncome ? 'text-emerald-600' : 'text-rose-600'}`}>
             {amount.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}
-        </p>
+        </span>
     </div>
 );
 
@@ -19,7 +20,7 @@ const PaymentMethodSummary: React.FC<PaymentMethodSummaryProps> = ({ transaction
   const summary = useMemo(() => {
     return transactions.reduce((acc, t) => {
         const totalAmount = calculateTotalAmount(t.items);
-        if (t.type === 'sale') {
+        if (t.type === 'income') {
             if (t.paymentMethod === 'Cash') acc.cashIn += totalAmount;
             else acc.bankIn += totalAmount;
         } else {
@@ -31,11 +32,21 @@ const PaymentMethodSummary: React.FC<PaymentMethodSummaryProps> = ({ transaction
   }, [transactions]);
 
   return (
-    <div className="grid grid-cols-2 gap-4">
-        <SummaryCard title="Cash In (Sales)" amount={summary.cashIn} color="text-green-600" />
-        <SummaryCard title="Cash Out (Expenses)" amount={summary.cashOut} color="text-red-600" />
-        <SummaryCard title="Bank In (Sales)" amount={summary.bankIn} color="text-green-600" />
-        <SummaryCard title="Bank Out (Expenses)" amount={summary.bankOut} color="text-red-600" />
+    <div className="space-y-4">
+        <div>
+            <p className="text-[9px] font-black text-slate-300 dark:text-slate-700 uppercase tracking-widest mb-1">Cash Ledger</p>
+            <div className="divide-y divide-slate-50 dark:divide-slate-800">
+                <SummaryItem title="Cash In (Sales)" amount={summary.cashIn} isIncome={true} />
+                <SummaryItem title="Cash Out (Exp)" amount={summary.cashOut} isIncome={false} />
+            </div>
+        </div>
+        <div>
+            <p className="text-[9px] font-black text-slate-300 dark:text-slate-700 uppercase tracking-widest mb-1">Digital Ledger</p>
+            <div className="divide-y divide-slate-50 dark:divide-slate-800">
+                <SummaryItem title="Bank In (Sales)" amount={summary.bankIn} isIncome={true} />
+                <SummaryItem title="Bank Out (Exp)" amount={summary.bankOut} isIncome={false} />
+            </div>
+        </div>
     </div>
   );
 };

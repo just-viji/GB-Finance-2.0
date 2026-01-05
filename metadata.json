@@ -1,6 +1,6 @@
 {
-  "name": "GB Finance 2.0",
-  "description": "A simple and powerful sales and expense tracker.",
+  "name": "GB Finance",
+  "description": "A simple and powerful personal income and expense tracker.",
   "requestFramePermissions": [
     "camera"
   ]

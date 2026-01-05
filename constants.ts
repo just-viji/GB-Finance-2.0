@@ -1,14 +1,11 @@
+
+export const APP_VERSION = "2.1.0";
+
 export const INITIAL_CATEGORIES = [
-  "Salaries & Wages",
-  "Utilities (Electricity, Water)",
-  "Maintenance & Repairs",
-  "Marketing & Advertising",
-  "Guest Supplies (Toiletries, etc.)",
-  "Linen & Laundry",
-  "Food & Beverage Costs",
-  "Administrative Costs",
-  "Property Taxes & Insurance",
-  "Booking Commissions",
+  "Salary",
+  "Groceries",
+  "Rent/Mortgage",
+  "Utilities",
   "Miscellaneous",
 ];
 

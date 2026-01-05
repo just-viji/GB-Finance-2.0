@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getAppScriptUrl, verifyAppScriptUrl } from '../services/supabase';
+import { getAppScriptUrl, saveAppScriptUrl, verifyAppScriptUrl } from '../services/supabase';
 
 interface GoogleSheetSyncProps {
   onConnect: () => void;
@@ -215,7 +215,7 @@ const GoogleSheetSync: React.FC<GoogleSheetSyncProps> = ({ onConnect, onDisconne
     setError(null);
     try {
       const { title } = await verifyAppScriptUrl(inputValue);
-      localStorage.setItem('google-appscript-url', inputValue);
+      saveAppScriptUrl(inputValue);
       setConnectedSheetTitle(title);
       onConnect();
     } catch (e) {

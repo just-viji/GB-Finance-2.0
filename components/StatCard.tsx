@@ -1,43 +1,48 @@
+
 import React from 'react';
 
 interface StatCardProps {
   title: string;
   amount: number;
-  type: 'sale' | 'expense' | 'profit';
+  type: 'income' | 'expense' | 'savings';
+  onAddClick?: () => void;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ title, amount, type }) => {
+const StatCard: React.FC<StatCardProps> = ({ title, amount, type, onAddClick }) => {
   const formatCurrency = (value: number) => {
-    return value.toLocaleString('en-IN', {
+    return Math.abs(value).toLocaleString('en-IN', {
       style: 'currency',
       currency: 'INR',
       maximumFractionDigits: 0,
     });
   };
 
-  const colors = {
-    sale: 'text-green-500',
-    expense: 'text-red-500',
-    profit: amount >= 0 ? 'text-blue-500' : 'text-red-500',
-  };
-
-  const icon = {
-    sale: <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v12m6-6H6" /></svg>,
-    expense: <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 12H6" /></svg>,
-    profit: <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 6-3 6m18-12-3 6 3 6" /></svg>,
+  const colorConfig = {
+    income: 'text-emerald-600',
+    expense: 'text-rose-600',
+    savings: amount >= 0 ? 'text-blue-600' : 'text-rose-600'
   };
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-md flex items-center justify-between">
-      <div>
-        <p className="text-brand-secondary font-medium">{title}</p>
-        <p className={`text-2xl sm:text-3xl font-bold ${colors[type]}`}>{formatCurrency(amount)}</p>
+    <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-xl flex flex-col justify-between shadow-sm transition-all hover:shadow-md">
+      <div className="flex justify-between items-center mb-3">
+        <h3 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{title}</h3>
+        {onAddClick && (
+          <button 
+            onClick={onAddClick} 
+            className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
+          >
+             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" /></svg>
+          </button>
+        )}
       </div>
-      <div className={`p-3 rounded-full bg-gray-100 ${colors[type]}`}>
-        {icon[type]}
+      <div className="flex items-baseline">
+        <span className={`text-2xl font-extrabold tracking-tight ${colorConfig[type]}`}>
+          {type === 'savings' && amount < 0 ? '-' : ''}{formatCurrency(amount)}
+        </span>
       </div>
     </div>
   );
 };
 
-export default StatCard;
+export default React.memo(StatCard);

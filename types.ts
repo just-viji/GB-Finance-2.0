@@ -1,4 +1,5 @@
-export type TransactionType = 'sale' | 'expense';
+
+export type TransactionType = 'income' | 'expense';
 export type PaymentMethod = 'Cash' | 'Online';
 
 export interface TransactionLineItem {
@@ -16,4 +17,14 @@ export interface Transaction {
   category: string;
   paymentMethod: PaymentMethod;
   items: TransactionLineItem[];
+  user_id?: string;
+  created_at?: string;
+}
+
+export interface AppRelease {
+  version: string;
+  download_url: string;
+  is_mandatory: boolean;
+  release_notes?: string;
+  created_at?: string;
 }

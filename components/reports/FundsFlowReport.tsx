@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo } from 'react';
 import { Transaction } from '../../types';
 import PaymentMethodSummary from './PaymentMethodSummary';
@@ -14,8 +15,6 @@ const FundsFlowReport: React.FC<FundsFlowReportProps> = ({ transactions, onBack 
         const today = new Date();
         const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
         const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
-        // This function formats a date to 'YYYY-MM-DD' in the local timezone,
-        // avoiding the conversion issues of toISOString().
         const formatDate = (date: Date) => {
             const year = date.getFullYear();
             const month = (date.getMonth() + 1).toString().padStart(2, '0');
@@ -50,63 +49,78 @@ const FundsFlowReport: React.FC<FundsFlowReportProps> = ({ transactions, onBack 
         return filteredTransactions.reduce((acc, t) => {
           const totalAmount = calculateTotalAmount(t.items);
           if (t.paymentMethod === 'Cash') {
-            if (t.type === 'sale') acc.netCashFlow += totalAmount;
+            if (t.type === 'income') acc.netCashFlow += totalAmount;
             else acc.netCashFlow -= totalAmount;
           } else if (t.paymentMethod === 'Online') {
-            if (t.type === 'sale') acc.netBankFlow += totalAmount;
+            if (t.type === 'income') acc.netBankFlow += totalAmount;
             else acc.netBankFlow -= totalAmount;
           }
           return acc;
         }, { netCashFlow: 0, netBankFlow: 0 });
       }, [filteredTransactions]);
 
+    const formatCurrency = (value: number) => value.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+
     return (
-        <div className="space-y-6">
-            <button onClick={onBack} className="flex items-center gap-2 text-sm font-semibold text-brand-secondary hover:text-brand-dark">
-                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                Back to Reports
-            </button>
-            <h2 className="text-2xl font-bold text-brand-dark">Funds Flow</h2>
+        <div className="max-w-md mx-auto h-[calc(100dvh-4.5rem-var(--sat,0px)-4rem)] flex flex-col bg-white dark:bg-slate-950 overflow-hidden border-x border-slate-100 dark:border-slate-900">
+            <header className="sticky top-0 z-40 bg-white dark:bg-slate-950 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
+                <div className="flex items-center px-4 h-14">
+                    <button onClick={onBack} className="p-2 -ml-2 text-slate-900 dark:text-white">
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                    </button>
+                    <h1 className="flex-grow text-center font-bold text-slate-900 dark:text-white mr-8">Funds Flow</h1>
+                </div>
+            </header>
 
-             <div className="bg-white p-4 rounded-xl shadow-md">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                     <div>
-                        <label htmlFor="filter-startdate" className="text-xs font-medium text-gray-500">Start Date</label>
-                        <input id="filter-startdate" type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} className="mt-1 block w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary"/>
+            <div className="flex-grow overflow-y-auto no-scrollbar bg-slate-50/50 dark:bg-slate-950">
+                <div className="p-4 space-y-4">
+                    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm grid grid-cols-2 gap-3">
+                         <div className="col-span-1">
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">From</label>
+                            <input type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs py-1 rounded-md outline-none px-1" />
+                        </div>
+                        <div className="col-span-1">
+                            <label className="block text-[10px] font-bold text-slate-400 uppercase mb-1">To</label>
+                            <input type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs py-1 rounded-md outline-none px-1" />
+                        </div>
                     </div>
-                    <div>
-                        <label htmlFor="filter-enddate" className="text-xs font-medium text-gray-500">End Date</label>
-                        <input id="filter-enddate" type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} className="mt-1 block w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary"/>
-                    </div>
-                </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white p-6 rounded-xl shadow-md">
-                    <p className="text-brand-secondary font-medium">Net Cash Flow (for period)</p>
-                    <p className={`text-2xl font-bold ${netCashFlow >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
-                        {netCashFlow.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}
-                    </p>
-                </div>
-                <div className="bg-white p-6 rounded-xl shadow-md">
-                    <p className="text-brand-secondary font-medium">Net Bank Flow (for period)</p>
-                    <p className={`text-2xl font-bold ${netBankFlow >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                        {netBankFlow.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })}
-                    </p>
-                </div>
-            </div>
 
-            <div className="bg-white p-6 rounded-xl shadow-md">
-                <h3 className="text-xl font-semibold mb-4 text-brand-dark">Flow Breakdown</h3>
-                {filteredTransactions.length > 0 ? (
-                    <PaymentMethodSummary transactions={filteredTransactions} />
-                ) : (
-                    <EmptyState 
-                        icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>}
-                        title="No Transaction Data"
-                        message="No transactions were found for the selected date range."
-                    />
-                )}
+                    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm divide-y divide-slate-100 dark:divide-slate-800">
+                        <div className="p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-lg">
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
+                                </div>
+                                <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest">Net Cash</span>
+                            </div>
+                            <span className={`text-sm font-bold ${netCashFlow >= 0 ? 'text-blue-500' : 'text-rose-500'}`}>{formatCurrency(netCashFlow)}</span>
+                        </div>
+                        <div className="p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 rounded-lg">
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a2 2 0 002-2V5a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                </div>
+                                <span className="text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-widest">Net Bank</span>
+                            </div>
+                            <span className={`text-sm font-bold ${netBankFlow >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>{formatCurrency(netBankFlow)}</span>
+                        </div>
+                    </div>
+
+                    <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 shadow-sm">
+                        <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Flow Breakdown</h3>
+                        {filteredTransactions.length > 0 ? (
+                            <PaymentMethodSummary transactions={filteredTransactions} />
+                        ) : (
+                            <div className="py-10">
+                                <EmptyState 
+                                    icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-slate-200" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>}
+                                    title="No Activity"
+                                    message="No flows detected in range."
+                                />
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );

@@ -1,23 +1,39 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Transaction, TransactionType, PaymentMethod, TransactionLineItem } from '../types';
 import { PAYMENT_METHODS } from '../constants';
 import { calculateTotalAmount } from '../utils/transactionUtils';
-import { scanBillWithGemini, blobToBase64 } from '../services/geminiService';
+import { scanBillLocally, scanBillWithGemini, blobToBase64 } from '../services/geminiService';
 
+declare global {
+  interface Window {
+    // Aligned window.aistudio declaration with the expected environment type to resolve compiler conflicts.
+    aistudio: {
+      hasSelectedApiKey: () => Promise<boolean>;
+      openSelectKey: () => Promise<void>;
+    };
+  }
+}
 
 interface TransactionFormProps {
   onSubmit: (transaction: Omit<Transaction, 'id'>) => void;
+  onCancel?: () => void;
   categories: string[];
   transactionDescriptions: string[];
   itemDescriptions: string[];
   showToast: (message: string, type?: 'success' | 'error') => void;
+  initialType?: TransactionType;
+  autoScan?: boolean;
 }
 
 type ItemState = Omit<TransactionLineItem, 'id' | 'unitPrice' | 'quantity'> & { unitPrice: string; quantity: string; };
 
-const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories, transactionDescriptions, itemDescriptions, showToast }) => {
-  const [type, setType] = useState<TransactionType>('sale');
+const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, onCancel, categories, showToast, initialType = 'expense', autoScan = false }) => {
+  const [type, setType] = useState<TransactionType>(initialType);
+  
+  const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('');
   const [date, setDate] = useState(() => {
     const today = new Date();
     const year = today.getFullYear();
@@ -25,31 +41,98 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
     const day = today.getDate().toString().padStart(2, '0');
     return `${year}-${month}-${day}`;
   });
-  const [category, setCategory] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Online');
+
+  const [isItemized, setIsItemized] = useState(false);
   const [items, setItems] = useState<ItemState[]>([{ description: '', quantity: '1', unitPrice: '' }]);
+  
+  const [errors, setErrors] = useState<{
+    amount?: boolean;
+    category?: boolean;
+    description?: boolean;
+    items?: number[];
+  }>({});
+
   const [isScanning, setIsScanning] = useState(false);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const uploadInputRef = useRef<HTMLInputElement>(null);
 
-  // When categories list updates (e.g., deleted category), ensure `category` state is valid
   useEffect(() => {
-    if (category && !categories.includes(category)) {
-      setCategory('');
+    if (autoScan) {
+      const timer = setTimeout(() => {
+        handleTriggerScan();
+      }, 150);
+      return () => clearTimeout(timer);
     }
-  }, [categories, category]);
-  
-  const grandTotal = useMemo(() => {
-    const numericItems = items.map(i => ({...i, id: '', unitPrice: parseFloat(i.unitPrice) || 0, quantity: parseFloat(i.quantity) || 0}));
-    return calculateTotalAmount(numericItems);
-  }, [items]);
+  }, [autoScan]);
+
+  const handleTriggerScan = async () => {
+    try {
+        const hasKey = await window.aistudio.hasSelectedApiKey();
+        if (!hasKey) {
+            await window.aistudio.openSelectKey();
+        }
+        cameraInputRef.current?.click();
+    } catch (e) {
+        console.error("Key selection bridge failed", e);
+        cameraInputRef.current?.click();
+    }
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsScanning(true);
+    showToast("Analyzing receipt with Gemini AI...", "success");
+
+    try {
+      const base64 = await blobToBase64(file);
+      const scannedItems = await scanBillWithGemini(base64);
+      
+      if (scannedItems && scannedItems.length > 0) {
+          setIsItemized(true);
+          setItems(scannedItems.map(item => ({
+              description: item.description,
+              quantity: String(item.quantity),
+              unitPrice: String(item.unitPrice)
+          })));
+          
+          if (scannedItems[0].description) {
+              setDescription(`Receipt: ${scannedItems[0].description}`);
+          }
+          
+          showToast(`Extracted ${scannedItems.length} items.`, "success");
+      } else {
+          showToast("No items found. Trying local OCR...", "error");
+          const localItems = await scanBillLocally(base64);
+          if (localItems && localItems.length > 0) {
+              setIsItemized(true);
+              setItems(localItems.map(item => ({
+                  description: item.description,
+                  quantity: String(item.quantity),
+                  unitPrice: String(item.unitPrice)
+              })));
+              showToast(`Extracted ${localItems.length} items via local OCR.`, "success");
+          } else {
+              showToast("OCR Failed. Please enter manually.", "error");
+          }
+      }
+    } catch (error: any) {
+        if (error.message === "API_KEY_INVALID") {
+            showToast("Invalid API Key. Please re-select.", "error");
+            await window.aistudio.openSelectKey();
+        } else {
+            showToast("Scanning failed.", "error");
+        }
+    } finally {
+        setIsScanning(false);
+        if (e.target) e.target.value = '';
+    }
+  };
 
   const handleItemChange = (index: number, field: keyof ItemState, value: string) => {
     const newItems = [...items];
-    newItems[index] = {
-      ...newItems[index],
-      [field]: value
-    };
+    newItems[index] = { ...newItems[index], [field]: value };
     setItems(newItems);
   };
 
@@ -63,225 +146,179 @@ const TransactionForm: React.FC<TransactionFormProps> = ({ onSubmit, categories,
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const hasInvalidItem = items.some(i => !i.description || (parseFloat(i.unitPrice) || 0) <= 0 || (parseFloat(i.quantity) || 0) <= 0);
-    if (!description || items.length === 0 || hasInvalidItem) {
-      alert('Please provide a main description and ensure all items have a description, a quantity greater than 0, and a price greater than 0.');
-      return;
+  const validate = (): boolean => {
+    const newErrors: typeof errors = {};
+    let isValid = true;
+
+    if (isItemized) {
+      const invalidIndices: number[] = [];
+      items.forEach((item, idx) => {
+        if (!item.description.trim() || isNaN(parseFloat(item.unitPrice))) {
+          invalidIndices.push(idx);
+        }
+      });
+      if (invalidIndices.length > 0) {
+        newErrors.items = invalidIndices;
+        isValid = false;
+      }
+    } else {
+      if (!amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+        newErrors.amount = true;
+        isValid = false;
+      }
     }
 
-    if (type === 'expense' && !category) {
-      alert('Please select a category for the expense.');
-      return;
+    if (!category) {
+      newErrors.category = true;
+      isValid = false;
     }
 
-    const finalItems = items.map(item => ({
-      id: '', // will be set in App.tsx
-      description: item.description,
-      quantity: parseFloat(item.quantity),
-      unitPrice: parseFloat(item.unitPrice)
-    }));
-    
-    const [year, month, day] = date.split('-').map(Number);
-    // We set it to noon local time to avoid timezone boundary issues.
-    const transactionDate = new Date(year, month - 1, day, 12, 0, 0);
-    
+    setErrors(newErrors);
+    return isValid;
+  };
+
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!validate()) return;
+
+    const lineItems: TransactionLineItem[] = isItemized 
+      ? items.map((item, idx) => ({
+          id: idx.toString(),
+          description: item.description,
+          quantity: parseFloat(item.quantity),
+          unitPrice: parseFloat(item.unitPrice)
+        }))
+      : [{
+          id: '0',
+          description: description || 'General',
+          quantity: 1,
+          unitPrice: parseFloat(amount)
+        }];
+
     onSubmit({
       type,
-      description,
-      date: transactionDate.toISOString(),
-      category: type === 'sale' ? 'Sale' : category,
+      description: description || (isItemized ? items[0].description : 'Manual Entry'),
+      date,
+      category,
       paymentMethod,
-      items: finalItems,
+      items: lineItems
     });
-
-    setDescription('');
-    setDate(() => {
-        const today = new Date();
-        const year = today.getFullYear();
-        const month = (today.getMonth() + 1).toString().padStart(2, '0');
-        const day = today.getDate().toString().padStart(2, '0');
-        return `${year}-${month}-${day}`;
-    });
-    setCategory('');
-    setPaymentMethod('Online');
-    setItems([{ description: '', quantity: '1', unitPrice: '' }]);
-  };
-  
-  const handleCameraClick = () => {
-    cameraInputRef.current?.click();
   };
 
-  const handleUploadClick = () => {
-    uploadInputRef.current?.click();
-  };
-
-
-  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsScanning(true);
-    try {
-      const base64Image = await blobToBase64(file);
-      const scannedItems = await scanBillWithGemini(base64Image);
-
-      if (scannedItems && scannedItems.length > 0) {
-        const newItems: ItemState[] = scannedItems.map(item => ({
-          description: item.description,
-          quantity: item.quantity.toString(),
-          unitPrice: item.unitPrice.toString(),
-        }));
-        setItems(newItems);
-        showToast('Bill scanned successfully!', 'success');
-      } else {
-        showToast('Could not find any items on the bill.', 'error');
-      }
-    } catch (error) {
-      console.error(error);
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
-      showToast(errorMessage, 'error');
-    } finally {
-      setIsScanning(false);
-      if (event.target) {
-        event.target.value = '';
-      }
+  const totalCalculated = useMemo(() => {
+    if (isItemized) {
+      return items.reduce((sum, item) => sum + (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0), 0);
     }
-  };
+    return parseFloat(amount) || 0;
+  }, [items, isItemized, amount]);
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-md">
-      <h2 className="text-xl font-semibold mb-6 text-brand-dark">Add New Transaction</h2>
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <datalist id="transaction-descriptions-list">
-            {transactionDescriptions.map(desc => <option key={desc} value={desc} />)}
-        </datalist>
-        <datalist id="item-descriptions-list">
-            {itemDescriptions.map(desc => <option key={desc} value={desc} />)}
-        </datalist>
+    <form onSubmit={handleSubmit} className="flex flex-col h-full bg-white dark:bg-slate-950 overflow-hidden">
+      <div className="flex-shrink-0 px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-950 sticky top-0 z-10">
+        <h2 className="text-lg font-black text-slate-900 dark:text-white uppercase tracking-tight">
+          {isScanning ? 'Scanning Receipt...' : (type === 'income' ? 'Log Income' : 'Log Expense')}
+        </h2>
+        <button type="button" onClick={onCancel} className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
 
-        <fieldset>
-          <legend className="text-sm font-medium text-brand-secondary mb-2">Transaction Type</legend>
-          <div className="flex bg-gray-100 rounded-lg p-1">
-            <button type="button" onClick={() => setType('sale')} className={`w-1/2 p-2 rounded-md text-sm font-medium transition-colors ${type === 'sale' ? 'bg-brand-primary text-white shadow' : 'text-brand-secondary hover:bg-gray-200'}`}>Sale</button>
-            <button type="button" onClick={() => setType('expense')} className={`w-1/2 p-2 rounded-md text-sm font-medium transition-colors ${type === 'expense' ? 'bg-brand-accent text-white shadow' : 'text-brand-secondary hover:bg-gray-200'}`}>Expense</button>
+      <div className="flex-grow overflow-y-auto no-scrollbar p-6 space-y-6">
+        <div className="flex gap-1 p-1 bg-slate-100 dark:bg-slate-900 rounded-xl">
+          <button type="button" onClick={() => setType('expense')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${type === 'expense' ? 'bg-white dark:bg-slate-800 text-rose-600 shadow-sm' : 'text-slate-500'}`}>Expense</button>
+          <button type="button" onClick={() => setType('income')} className={`flex-1 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${type === 'income' ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-sm' : 'text-slate-500'}`}>Income</button>
+        </div>
+
+        {!isItemized ? (
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Amount</label>
+            <div className="relative">
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-2xl font-black text-slate-300">₹</span>
+              <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className={`w-full text-4xl font-black py-4 pl-10 pr-4 bg-slate-50 dark:bg-slate-900 border ${errors.amount ? 'border-rose-500' : 'border-slate-100 dark:border-slate-800'} rounded-2xl outline-none focus:ring-2 focus:ring-brand-primary/20 transition-all text-slate-900 dark:text-white`} placeholder="0.00" />
+            </div>
           </div>
-        </fieldset>
-
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div className="md:col-span-3">
-                <label htmlFor="description" className="block text-sm font-medium text-brand-secondary mb-1">Overall Description</label>
-                <input id="description" type="text" value={description} onChange={(e) => setDescription(e.target.value)} placeholder={type === 'sale' ? 'e.g., Room booking for Mr. Smith' : 'e.g., Purchase of fresh produce'} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary" list="transaction-descriptions-list"/>
-            </div>
-            <div className="md:col-span-2">
-                <label htmlFor="date" className="block text-sm font-medium text-brand-secondary mb-1">Date</label>
-                <input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary" />
-            </div>
-        </div>
-        
-        {/* Line Items */}
-        <fieldset>
-             <div className="flex justify-between items-center mb-2">
-                <legend className="text-sm font-medium text-brand-secondary">Items</legend>
-                {type === 'expense' && (
-                  <div className="flex items-center gap-2">
-                    {isScanning ? (
-                      <div className="flex items-center gap-2 text-sm font-semibold text-brand-primary" aria-live="polite">
-                        <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                        Scanning...
-                      </div>
-                    ) : (
-                      <>
-                        <button 
-                          type="button" 
-                          onClick={handleCameraClick}
-                          className="p-2 text-brand-primary rounded-full hover:bg-brand-primary/10 transition-colors"
-                          aria-label="Scan bill with camera"
-                          title="Scan bill with camera"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M2 6a2 2 0 012-2h1.172a2 2 0 011.414.586l.828.828A2 2 0 008.828 6H11.172a2 2 0 001.414-.586l.828-.828A2 2 0 0114.828 4H16a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
-                            <path fillRule="evenodd" d="M10 14a4 4 0 100-8 4 4 0 000 8zm0-2a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                        <button 
-                          type="button" 
-                          onClick={handleUploadClick}
-                          className="p-2 text-brand-primary rounded-full hover:bg-brand-primary/10 transition-colors"
-                          aria-label="Upload bill from device"
-                          title="Upload bill from device"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                              <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clipRule="evenodd" />
-                          </svg>
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
+        ) : (
+          <div className="space-y-4">
+             <div className="flex items-center justify-between">
+               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Line Items</label>
+               <button type="button" onClick={() => setIsItemized(false)} className="text-[9px] font-black text-rose-500 uppercase tracking-widest">Switch to Single</button>
              </div>
-            <div className="space-y-3">
-                {items.map((item, index) => {
-                    const lineTotal = (parseFloat(item.unitPrice) || 0) * (parseFloat(item.quantity) || 0);
-                    return (
-                        <div key={index} className="grid grid-cols-12 gap-2 p-2 bg-gray-50 rounded-lg items-center">
-                            <input type="text" placeholder="Item Description" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} className="col-span-12 sm:col-span-5 bg-white border border-gray-300 text-brand-dark rounded-md p-2 text-sm focus:ring-brand-primary focus:border-brand-primary" list="item-descriptions-list" />
-                            <input type="number" placeholder="Qty" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', e.target.value)} className="col-span-3 sm:col-span-2 bg-white border border-gray-300 text-brand-dark rounded-md p-2 text-sm focus:ring-brand-primary focus:border-brand-primary" min="0.01" step="any" />
-                            <input type="number" placeholder="Price" value={item.unitPrice} onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value)} className="col-span-4 sm:col-span-2 bg-white border border-gray-300 text-brand-dark rounded-md p-2 text-sm focus:ring-brand-primary focus:border-brand-primary" min="0" step="0.01"/>
-                            <div className="col-span-3 sm:col-span-2 text-right pr-1">
-                                <p className="text-sm font-medium text-brand-dark truncate">
-                                    {lineTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
-                                </p>
-                            </div>
-                            <button type="button" onClick={() => removeItem(index)} disabled={items.length <= 1} className="col-span-2 sm:col-span-1 flex justify-center items-center text-red-500 hover:bg-red-100 rounded-md disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" /></svg></button>
-                        </div>
-                    );
-                })}
-                <button type="button" onClick={addItem} className="w-full text-sm font-semibold text-brand-primary hover:text-brand-primary-hover py-1">+ Add Item</button>
-            </div>
-        </fieldset>
+             <div className="space-y-3">
+               {items.map((item, index) => (
+                 <div key={index} className="p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-100 dark:border-slate-800 space-y-2">
+                   <div className="flex gap-2">
+                      <input type="text" value={item.description} onChange={(e) => handleItemChange(index, 'description', e.target.value)} className="flex-grow bg-transparent text-sm font-bold outline-none placeholder-slate-400" placeholder="Description" />
+                      <button type="button" onClick={() => removeItem(index)} className="text-slate-300 hover:text-rose-500"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg></button>
+                   </div>
+                   <div className="flex gap-4">
+                      <div className="flex-1">
+                        <label className="block text-[8px] font-bold text-slate-400 uppercase">Qty</label>
+                        <input type="number" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', e.target.value)} className="w-full bg-transparent text-sm font-black outline-none" />
+                      </div>
+                      <div className="flex-1">
+                        <label className="block text-[8px] font-bold text-slate-400 uppercase">Price</label>
+                        <input type="number" step="0.01" value={item.unitPrice} onChange={(e) => handleItemChange(index, 'unitPrice', e.target.value)} className="w-full bg-transparent text-sm font-black outline-none" />
+                      </div>
+                      <div className="text-right">
+                        <label className="block text-[8px] font-bold text-slate-400 uppercase">Total</label>
+                        <span className="text-sm font-black text-slate-900 dark:text-white">₹{((parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)).toLocaleString()}</span>
+                      </div>
+                   </div>
+                 </div>
+               ))}
+               <button type="button" onClick={addItem} className="w-full py-3 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-[10px] font-black text-slate-400 uppercase tracking-widest hover:border-brand-primary hover:text-brand-primary transition-all">+ Add Line Item</button>
+             </div>
+          </div>
+        )}
 
-        <input
-            type="file"
-            ref={cameraInputRef}
-            onChange={handleFileChange}
-            className="hidden"
-            accept="image/*"
-            capture="environment"
-        />
-        <input
-            type="file"
-            ref={uploadInputRef}
-            onChange={handleFileChange}
-            className="hidden"
-            accept="image/*"
-        />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Category</label>
+            <select value={category} onChange={(e) => setCategory(e.target.value)} className={`w-full bg-slate-50 dark:bg-slate-900 border ${errors.category ? 'border-rose-500' : 'border-slate-100 dark:border-slate-800'} rounded-xl p-3 text-sm font-bold outline-none text-slate-900 dark:text-white`}>
+              <option value="">Select Category</option>
+              {categories.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Payment Method</label>
+            <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-3 text-sm font-bold outline-none text-slate-900 dark:text-white">
+              {PAYMENT_METHODS.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+        </div>
 
-        <div className="flex justify-end font-bold text-lg text-brand-dark pr-2">
-            Total: {grandTotal.toLocaleString('en-IN', { style: 'currency', currency: 'INR' })}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+           <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Date</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-3 text-sm font-bold outline-none text-slate-900 dark:text-white" />
+          </div>
+          <div>
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Notes</label>
+            <input type="text" value={description} onChange={(e) => setDescription(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl p-3 text-sm font-bold outline-none text-slate-900 dark:text-white" placeholder="Optional details..." />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-shrink-0 p-6 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 space-y-4">
+        <div className="flex justify-between items-center px-2">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Calculated Total</span>
+            <span className="text-2xl font-black text-slate-900 dark:text-white">₹{totalCalculated.toLocaleString()}</span>
         </div>
         
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {type === 'expense' && (
-                <div>
-                  <label htmlFor="category" className="block text-sm font-medium text-brand-secondary mb-1">Category</label>
-                  <select id="category" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary">
-                    <option value="" disabled>Select a category</option>
-                    {categories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                  </select>
-                </div>
-            )}
-             <div className={type === 'sale' ? 'sm:col-span-2' : ''}>
-                <label htmlFor="paymentMethod" className="block text-sm font-medium text-brand-secondary mb-1">Payment Method</label>
-                <select id="paymentMethod" value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)} className="w-full bg-gray-50 border border-gray-300 text-brand-dark rounded-md p-2 focus:ring-brand-primary focus:border-brand-primary">
-                    {PAYMENT_METHODS.map(method => <option key={method} value={method}>{method}</option>)}
-                </select>
-            </div>
+        <div className="flex gap-3">
+            <button type="button" onClick={() => setIsItemized(!isItemized)} className="flex-1 py-4 border border-slate-200 dark:border-slate-700 rounded-xl text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 hover:bg-white dark:hover:bg-slate-800 transition-all">
+                {isItemized ? 'Merge to One' : 'Itemize Entry'}
+            </button>
+            <button type="submit" className="flex-[2] py-4 bg-brand-dark dark:bg-brand-primary text-white rounded-xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg active:scale-95 transition-all">
+                Finalize Entry
+            </button>
         </div>
-        <button type="submit" className="w-full bg-brand-primary text-white font-bold py-3 px-4 rounded-md hover:bg-brand-primary-hover transition-colors shadow-sm hover:shadow-md">Add Transaction</button>
-      </form>
-    </div>
+        
+        <div className="hidden">
+            <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" onChange={handleFileChange} />
+        </div>
+      </div>
+    </form>
   );
 };
 
